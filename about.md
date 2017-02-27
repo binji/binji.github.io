@@ -1,15 +1,16 @@
 ---
 layout: page
-title: About
+title: about
 permalink: /about/
 ---
+- Who: Ben Smith
+- What: Software Engineer @ Google, thoughts here are my own
+- Where: Oakland, CA
+- When: Presently
+- Why: Too much free time, I suppose
+- How: [Lenovo X1 Carbon][x1 carbon], [Arch Linux][arch], [Awesome WM][awesome], [vim][vim]
 
-This is the base Jekyll theme. You can find out more info about customizing your Jekyll theme, as well as basic Jekyll usage documentation at [jekyllrb.com](http://jekyllrb.com/)
-
-You can find the source code for the Jekyll new theme at:
-{% include icon-github.html username="jekyll" %} /
-[minima](https://github.com/jekyll/minima)
-
-You can find the source code for Jekyll at
-{% include icon-github.html username="jekyll" %} /
-[jekyll](https://github.com/jekyll/jekyll)
+[x1 carbon]: http://shop.lenovo.com/us/en/laptops/thinkpad/x-series/x1-carbon-4/
+[arch]: https://www.archlinux.org/
+[awesome]: https://awesomewm.org/
+[vim]: http://www.vim.org/
