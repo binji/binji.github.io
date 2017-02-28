@@ -71,10 +71,11 @@ meant be used: do all the work for updating the frame in the
 requestAnimationFrame callback. See the [MDN docs][mdn raf].
 
 I didn't get around to improving this until I added audio earlier this month;
-read all about it in the next post!
+read all about it in the [next post][part 2]!
 
 [binjgb]: https://github.com/binji/binjgb
 [initial commit]: https://github.com/binji/binjgb/commit/03192d3f43662c5aa7ba2522e3b46e839b734021
 [initial jank]: {{ site.url }}/assets/2017-02-26-initial-jank.png
 [timeline view]: https://developers.google.com/web/tools/chrome-devtools/evaluate-performance/timeline-tool
 [mdn raf]: http://devdocs.io/dom/window/requestanimationframe
+[part 2]: {{ site.baseurl }}{% post_url 2017-02-27-binjgb-on-the-web-part-2 %}
