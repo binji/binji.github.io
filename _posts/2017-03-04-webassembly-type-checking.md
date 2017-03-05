@@ -242,9 +242,9 @@ end
 This is equivalent to something like:
 
 {% highlight javascript %}
-while ($not_done != 0) {
+do {
   ...
-}
+} while($not_done != 0);
 {% endhighlight %}
 
 # Stack diving
