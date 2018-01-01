@@ -1,7 +1,7 @@
 ---
 layout: post
 title:  "binjgb rewind"
-date:   2017-12-19 3:09:00 -0700
+date:   2017-12-31 20:00:00 -0700
 ---
 
 I stopped working on [binjgb][], and blogging, and other personal projects
@@ -376,7 +376,7 @@ The ranges are always ordered as follows:
 ![info/data range ordering][]
 
 The data pointers in `info_range[i]` always point into `data_range[i]`, where
-`i` is either `0` or `1.
+`i` is either `0` or `1`.
 
 New `RewindInfo` is always added to the beginning of `info_range[0]`, possibly
 overwriting `RewindInfo` at then end of `info_range[1]`. Similarly, new
@@ -404,9 +404,11 @@ shrunk, making sure this invariant is kept:
 info_range[1].end[-1].data == data_range[1].begin
 ```
 
-```
-TODO: animation of this?
-```
+Here's an animation of the first 20 seconds of Donkey Kong, using a 128KiB
+buffer. The lighter colors are used for range `0` and the darker colors for
+range `1`.
+
+![rewind animation][]
 
 There's some additional subtlety required (choosing intermediate vs. base
 states, keeping an uncompressed copy of the last base state, etc.) but this
@@ -474,3 +476,4 @@ to, you can call `host_end_rewind` and continue playing.
 [info/data range ordering]: {{ site.url }}/assets/2017-12-31-info-data-range-ordering.png
 [empty ranges]: {{ site.url }}/assets/2017-12-31-empty-ranges.png
 [info/data overflow]: {{ site.url }}/assets/2017-12-31-info-data-overflow.png
+[rewind animation]: {{ site.url }}/assets/2017-12-31-rewind-animation.gif
