@@ -11,6 +11,8 @@ hard to stay inside and hack...
 But in late June I picked up binjgb a bit and started working on a new feature:
 **rewinding**.
 
+![rewind super mario land][]
+
 I was inspired by a [reddit post][] announcing a new NES emulator called
 [*nintaco*](http://nintaco.com/). It actually has quite a few cool features,
 but the one that got the most attention was the ability to "rewind time".
@@ -466,6 +468,22 @@ to, you can call `host_end_rewind` and continue playing.
 <video src="{{ site.url }}/assets/2017-12-31-rewind-scrub.mp4" controls>
 </video>
 
+You can see some of the final rewind buffer stats at the bottom of this video.
+The rate during gameplay is closer to 70KiB/sec instead of 40KiB/sec I
+calculated above, but I'm still pretty happy with the result.
+
+# Step 4: Enjoy!!
+
+Once I had rewind working, I wired it up to a hotkey and just started playing,
+rewinding away my many mistakes.
+
+:smile:
+
+I really wanted to finish this post before the end of the year, and it seems
+like I just made it (in my time zone anyway.)
+
+Happy New Year everyone!
+
 [binjgb]: https://github.com/binji/binjgb
 [reddit post]: https://www.reddit.com/r/programming/comments/662tgc/i_created_an_opensource_nes_emulator_that_can/?ref=share&ref_source=link
 [zlib]: https://zlib.net
@@ -477,3 +495,4 @@ to, you can call `host_end_rewind` and continue playing.
 [empty ranges]: {{ site.url }}/assets/2017-12-31-empty-ranges.png
 [info/data overflow]: {{ site.url }}/assets/2017-12-31-info-data-overflow.png
 [rewind animation]: {{ site.url }}/assets/2017-12-31-rewind-animation.gif
+[rewind super mario land]: {{ site.url }}/assets/2017-12-31-rewind-sml.gif
