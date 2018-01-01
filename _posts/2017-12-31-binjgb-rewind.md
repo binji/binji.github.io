@@ -463,8 +463,8 @@ mode in the debugger. This way, you can call `host_begin_rewind` and seek
 through all previous save states. When you find the state you want to rewind
 to, you can call `host_end_rewind` and continue playing.
 
-# Step 4: 
-
+<video src="{{ site.url }}/assets/2017-12-31-rewind-scrub.mp4" controls>
+</video>
 
 [binjgb]: https://github.com/binji/binjgb
 [reddit post]: https://www.reddit.com/r/programming/comments/662tgc/i_created_an_opensource_nes_emulator_that_can/?ref=share&ref_source=link
