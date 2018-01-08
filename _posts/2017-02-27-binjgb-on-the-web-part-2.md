@@ -155,7 +155,7 @@ button and hear the jump half a second later.
 
 I finally had a pretty decent implementation using the above strategy in
 binjgb. You can take a look at the commit [here][binjgb audio]. One interesting
-aspect is that binjgb generates an 2-channel, interleaved 8-bit audio stream.
+aspect is that binjgb generates a 2-channel, interleaved 8-bit audio stream.
 Since WebAudio requires a 32-bit float audio stream, with indpendent channels,
 we have to move things around a bit:
 

@@ -67,7 +67,7 @@ i32.add
 Here, `get_local` is an instruction that gets a local variable's value and
 pushes it on the stack. It can also be used to get the value of a function
 parameter. In either case, we don't know what the value is that will be pushed
-on the stack. We do know what it's type must be, though. So for validation, we
+on the stack. We do know what its type must be, though. So for validation, we
 actually use a type stack, not a value stack.
 
 Let's look at a simple example of a full function:
@@ -264,15 +264,15 @@ block
 end
 ```
 
-Even the stack contains two `i32` values, `i32.add` can't pop through the
-`block` to access them.
+Even though the stack contains two `i32` values, `i32.add` can't pop through
+the `block` to access them.
 
 # Expression-based Control Flow
 
 WebAssembly has expression-based control flow instructions, which means that a
 value can "flow" through with the control. If you know JavaScript or C, think
-of it as the difference between if and the ?: operator. In those languages, an
-if statement does not return a value:
+of it as the difference between an if statement and the ?: operator. In those
+languages, an if statement does not return a value:
 
 {% highlight javascript %}
 if (something) {
@@ -555,4 +555,4 @@ probably do a follow-up. Thanks for reading, and see you next time!
 [all instructions]: https://github.com/WebAssembly/design/blob/master/BinaryEncoding.md#control-flow-operators-described-here
 [unreachable]: https://github.com/WebAssembly/design/pull/894
 [wabt type-checker]: https://github.com/WebAssembly/wabt/blob/master/src/type-checker.cc
-[spec type-checker]: https://github.com/WebAssembly/spec/blob/master/interpreter/spec/valid.ml
+[spec type-checker]: https://github.com/WebAssembly/spec/blob/master/interpreter/valid/valid.ml
