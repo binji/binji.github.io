@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="en">
+
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>debugging hangs</title>
+    <meta name="Description" content="">
+    <link rel="stylesheet" href="/css/main.css">
+    <link rel="stylesheet" href="/css/prism-xonokai.css">
+
+    <!-- copy-pasted favicon stuff from http://realfavicongenerator.net/ -->
+    <link rel="apple-touch-icon" sizes="120x120" href="/apple-touch-icon.png">
+    <link rel="icon" type="image/png" href="/favicon-32x32.png" sizes="32x32">
+    <link rel="icon" type="image/png" href="/favicon-16x16.png" sizes="16x16">
+    <link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+    <meta name="theme-color" content="#ffffff">
+
+  </head>
+
+  <body>
+    <header class="site-header" role="banner">
+      <div class="wrapper header-wrapper">
+        <img class="site-binji-img" src="https://binji.github.io//assets/benji-banner-4x.png"></img>
+        <a class="site-title" href="/">binji&#39;s dustbin</a>
+
+        <nav class="site-nav">
+          <div class="trigger">
+            
+              
+              <a class="page-link" href="/about/">about</a>
+              
+            
+          </div>
+        </nav>
+      </div>
+
+    </header>
+
+    <main class="page-content" aria-label="Content">
+      <div class="wrapper">
+        <article class="post" itemscope itemtype="http://schema.org/BlogPosting">
+
+  <header class="post-header">
+    <h1 class="post-title" itemprop="name headline">debugging hangs</h1>
+    
+    <p class="post-meta"><time datetime="03 May 2017" itemprop="datePublished">03 May 2017</time></p>
+    
+  </header>
+
+  <div class="post-content" itemprop="articleBody">
+    <script type="text/javascript"
+    src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+</script>
+<h1>Running pouët Demos</h1>
+<p>I recently tested some public domain gameboy demos from <a href="https://www.pouet.net">pouet.net</a> with
+binjgb. They're good to run as tests because they're pretty fun, and often do
+weirder stuff than a commercial game would do.</p>
+<p>One of my favorites is <a href="https://www.pouet.net/prod.php?which=65997">&quot;Is That a Demo in Your Pocket&quot;</a> by
+snorpung and nordloef. It's goes by pretty quick, but it has a bunch of nice
+effects:</p>
+<p><img src="/assets/2017-05-02-big-pockets-required.gif" alt="big pockets required"></p>
+<p>As I went down the list of demos on pouet.net, I got to one called
+<a href="https://www.pouet.net/prod.php?which=53578">Man Meets Machine - Alternative Party 2009</a> by jumalauta. I ran
+it and got this:</p>
+<p><img src="/assets/2017-05-02-jmla09-hang.gif" alt="jmla09 hang"></p>
+<p><strong>H A N G S !</strong></p>
+<h1>Initial Investigation</h1>
+<p>OK, so the first thing to determine is where it is hanging. I've recently been
+working on a debugger UI using <a href="https://github.com/ocornut/imgui">dear imgui</a>, so I ran the demo in
+the debugger and found where it was hanging:</p>
+<p><img src="/assets/2017-05-02-hang-loop.png" alt="hang loop"></p>
+<p>Here's what it's doing:</p>
+<ol>
+<li>Read from <code>0xFF44</code> into the <code>A</code> register</li>
+<li>Increment <code>A</code></li>
+<li>Copy <code>A</code> into the <code>E</code> register</li>
+<li>Read from <code>0xFF44</code> into the <code>A</code> register</li>
+<li>Compare <code>E</code> to <code>A</code></li>
+<li>If they are not equal, jump back to step 4.</li>
+</ol>
+<p>It seems like this is an infinite loop, right? It keeps reading <code>0xFF44</code>
+expecting it to change, but never changes it. Well, it turns out that <code>0xFF44</code>
+is actually the <code>LY</code> memory-mapped register. It basically is used to tell the
+program what horizontal line is currently being drawn, from 0 to 153. So this
+loop is actually just waiting for the next line to start.</p>
+<h1>153?</h1>
+<p>A bit of an aside about the number 153: the gameboy has a screen resolution
+of 160 by 144 pixels. So why 153? Lines 144 to 153 are for the vertical blank
+(vblank) period. On a CRT screen, the vertical blank is the time that it takes
+the raster gun to go from the bottom-right corner to the top-left corner. The
+gameboy has an LCD screen, so it doesn't actually have a vblank, but I guess it
+was convenient to pretend that there was one because people expected it.</p>
+<p>So why would it hang waiting for the next line? You've probably already
+guessed: if the initial read (step 1 above) reads 153, then it will wait for
+line 154 which never happens.</p>
+<p>Let's take a look at the registers and see if we're right:</p>
+<p><img src="/assets/2017-05-02-registers.png" alt="registers"></p>
+<p>The registers are all listed in hexadecimal, so <code>E</code> is 0x99, which 153. But
+that means that we are waiting for line 153, not line 154. That should be fine,
+right?</p>
+<p>Well, things are a little more complicated than they seem...</p>
+<h1>Digging Deeper</h1>
+<p>Each line doesn't take the same amount of time. Lines 1 through 152 take 456
+cycles. But lines 0 and 153 are special: line 153 only lasts for 4 cycles
+before looping back around to line 0 for $$ 456 * 2 - 4 = 908 $$ cycles.</p>
+<p>So our loop will only exit if we read from <code>0xFF44</code> (step 4) at exactly the
+right time, when <code>LY</code> is 153 for those 4 cycles.</p>
+<h1>Cycle Counting</h1>
+<p>How likely is this to happen? Let's look at the timing of our loop:</p>
+<pre><code>0x80b2: f0 44     LD A, (FF44H)
+0x80b4: bb        CP E
+0x80b5: 20 fb     JR NZ, -5
+</code></pre>
+<p>Each instruction on the gameboy CPU takes a multiple of 4 cycles. Each memory
+read (including the read of the opcode) takes 4 cycles. Some instructions, like
+calls, jumps, and 16-bit operations, take more.</p>
+<pre><code>LD A, (FF44H)
+</code></pre>
+<p>The first instruction takes 12 cycles: 8 to read the instruction (the bytes
+<code>0xf0</code> and <code>0x44</code>) and 4 more to read from the address <code>0xFF44</code>.</p>
+<pre><code>CP E
+</code></pre>
+<p>The second instruction takes just 4 cycles.</p>
+<pre><code>JR NZ, -5
+</code></pre>
+<p>The final instruction takes 16 cycles if the branch is taken, 12 if it isn't.</p>
+<p>Here is the only scenario where we'll exit the loop. The * marks when we
+actually read the <code>LY</code> value.</p>
+<p>| --- | --- | --- |</p>
+<table>
+<thead>
+<tr>
+<th>Cycle</th>
+<th>Instruction</th>
+<th>LY</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>N + 0</td>
+<td>LD A, (FF44H)</td>
+<td>152</td>
+</tr>
+<tr>
+<td>N + 4</td>
+<td>LD A, (FF44H)</td>
+<td>152</td>
+</tr>
+<tr>
+<td>N + 8</td>
+<td>LD A, (FF44H) *</td>
+<td>153</td>
+</tr>
+<tr>
+<td>N + 12</td>
+<td>CP E</td>
+<td>0</td>
+</tr>
+<tr>
+<td>N + 16</td>
+<td>JR NZ, -5</td>
+<td>0</td>
+</tr>
+<tr>
+<td>N + 20</td>
+<td>JR NZ, -5</td>
+<td>0</td>
+</tr>
+<tr>
+<td>N + 24</td>
+<td>JR NZ, -5</td>
+<td>0</td>
+</tr>
+<tr>
+<td>N + 28</td>
+<td>JR NZ, -5</td>
+<td>0</td>
+</tr>
+<tr>
+<td>---</td>
+<td>---</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p>We want to know if this will occur eventually. To find this out we can use the
+greatest common divisor. Our loop is $$ 12 + 4 + 16 = 32 $$ cycles, and our
+frame takes $$ 456 * 154 = 70224 $$ cycles. The greatest common divisor of
+70224 and 32 is 16. This means that LY=153 will only ever occur at two of the
+cycle counts above: <code>N + 0</code> and <code>N + 16</code>, or <code>N + 4</code> and <code>N + 20</code>, or <code>N + 8</code>
+and <code>N + 24</code> or <code>N + 12</code> and <code>N + 28</code>.</p>
+<p>As we can see from the table above, we want LY=153 to occur at <code>N + 8</code>.</p>
+<p>I hope this makes sense, I'm having a hard time explaining it. Anyway, the
+point is that we only have to loop for two frames before we can know if we'll
+ever read 153. Spoiler: we never do.</p>
+<h1>Testing on Hardware</h1>
+<p>Who knows, maybe my emulator got it right? We need to test on real hardware to
+know the truth. Fortunately, I bought a cart writer and a couple of writable
+cartridges.</p>
+<p><video src="/assets/2017-05-02-hardware-test.mp4" controls></video></p>
+<p>And the truth is: my emulator got it wrong. 😞</p>
+<h1>Digging Deeperer</h1>
+<p>Now that we know the demo should work on hardware, we need to figure out where
+the emulator is going wrong. Here are the options:</p>
+<ol>
+<li>Waiting for line 153 is OK, the bug is that we never read it</li>
+<li>We shouldn't be waiting for line 153, something screwed up before this</li>
+</ol>
+<p>It's hard to know which is right without more info. The debugger has some
+features to trace interrupts, I/O reads/writes, etc. Turning those and piping
+to a file, we get:</p>
+<pre><code> ...
+ &gt;&gt; LCD_STAT interrupt [...H]
+ &gt;&gt; trigger STAT [LY: 142] [cy: 107863268]
+ (0x44 [LY]) = 0x8e
+ (0x44 [LY]) = 0x8e
+ (0x44 [LY]) = 0x8f
+ (0x43 [SCX], 0x1d)
+ (0x42 [SCY], 0x83)
+ &gt;&gt; LCD_STAT interrupt [...H]
+ &gt;&gt; trigger STAT [LY: 143] [cy: 107863724]
+ (0x44 [LY]) = 0x8f
+ (0x44 [LY]) = 0x8f
+ (0x44 [LY]) = 0x90
+ (0x43 [SCX], 0x1c)
+ (0x42 [SCY], 0x83)
+ &gt;&gt; VBLANK interrupt [frame = 1591]
+ (0x46 [DMA], 0xce)
+ &gt;&gt; LCD_STAT interrupt [...H]
+ (0x44 [LY]) = 0x98
+ (0x44 [LY]) = 0x98
+ (0x44 [LY]) = 0x98
+ (0x44 [LY]) = 0x98
+ (0x44 [LY]) = 0x98
+ (0x44 [LY]) = 0x98
+ (0x44 [LY]) = 0x98
+ (0x44 [LY]) = 0x98
+ (0x44 [LY]) = 0x98
+ (0x44 [LY]) = 0x98
+ (0x44 [LY]) = 0x98
+ (0x44 [LY]) = 0x98
+ (0x44 [LY]) = 0x98
+ (0x44 [LY]) = 0x98
+ (0x44 [LY]) = 0x98
+ (0x44 [LY]) = 0x98
+ (0x44 [LY]) = 00
+ (0x44 [LY]) = 00
+ ...
+</code></pre>
+<p>Before we go further, let me briefly explain interrupts. An interrupt is
+basically just a signal to the CPU to &quot;interrupt&quot; its normal behavior and do
+something different. The gameboy has a few different kinds of interrupts,
+generated by the hardware: VBLANK, STAT, TIMER, SERIAL, and JOYPAD. In our
+demo, we only care about the VBLANK and STAT interrupts.</p>
+<p>The VBLANK interrupt is triggered when a vblank occurs, once every 70224
+cycles, which is approximately 16.74ms.</p>
+<p>The STAT interrupt can be triggered for a few different reasons, but in this
+case, I know that it is for a horizontal blank (hblank) interrupt. Just like
+the vertical blank, CRT monitors also have a horizontal blank period where the
+raster gun would move from the right side of the screen to the left side, one
+line down. The gameboy hblank interrupt is triggered when the current line has
+finished drawing. The hblank period doesn't last very long. It's variable, but
+it's always less than or equal to 204 cycles.</p>
+<p>When an interrupt is triggered, all that really happens is a bit is set in a
+memory-mapped I/O register called <code>IF</code>. The interrupt isn't handled until the
+CPU is ready to do so: for example, an interrupt might be triggered in the
+middle of an instruction, but it won't be handled until the instruction is
+finished.</p>
+<p>The CPU can also disable interrupts via the <code>DI</code> instruction. In that case,
+the interrupt won't actually be handled until interrupts are enabled again
+via the <code>EI</code> instruction.</p>
+<p>When an interrupt is finally handled, the CPU will branch to a specific
+location in memory (address <code>0x40</code> for VBLANK, <code>0x48</code> for STAT, etc.) and start
+executing code there.</p>
+<h1>Reading the Log</h1>
+<p>So coming back to the log above, we have a few different kinds of messages:</p>
+<ul>
+<li>
+<p><code>trigger STAT [LY: 142] [cy: 107863268]</code></p>
+<p>This message means the graphics hardware has triggered a STAT interrupt at
+line 142. <code>cy</code> is the current cycle count.</p>
+</li>
+<li>
+<p><code>LCD_STAT interrupt [...H]</code></p>
+<p>This particular message means we've started executing the hblank interrupt
+handler (<code>H</code> is for hblank).</p>
+</li>
+<li>
+<p><code>VBLANK interrupt [frame = 1591]</code></p>
+<p>This message means we've started executing the vblank interrupt handler, and
+this is the 1591st frame rendered.</p>
+</li>
+<li>
+<p><code>(0x44 [LY]) = 0x8f</code></p>
+<p>This message means the we read the <code>LY</code> register and got the value <code>0x8f</code>.</p>
+</li>
+</ul>
+<p>This output shows exactly when everything goes wrong. Notice at the end that we
+read <code>0x98</code> (152) from <code>LY</code>, then wrap around to reading 0. But what happens
+before that? Something strange happens right here:</p>
+<pre><code> &gt;&gt; VBLANK interrupt [frame = 1591]
+ (0x46 [DMA], 0xce)
+ &gt;&gt; LCD_STAT interrupt [...H]
+</code></pre>
+<p>The hblank interrupt only fires for lines 0 through 143. After that, we're in
+the vblank period and no hblanks interrupts should occur. So why do we see the
+hblank interrupt handler executing <em>after</em> the vblank interrupt handler?</p>
+<h1>Handling Multiple Interrupts</h1>
+<p>Notice that the hblank interrupt is triggered before the vblank interrupt, but
+it isn't handled until after. We can see something else strange looking at
+where the hblank interrupt is triggered:</p>
+<pre><code> &gt;&gt; LCD_STAT interrupt [...H]
+ &gt;&gt; trigger STAT [LY: 143] [cy: 107863724]
+</code></pre>
+<p>Normally an interrupt is triggered, then is handled. But this is backward --
+the interrupt is being handled before it is triggered!</p>
+<p>When an interrupt is handled, interrupts are disabled automatically, just as if
+you executed the <code>DI</code> instruction. If any other interrupts are triggered at
+this point, they won't be handled until the current interrupt handler
+re-enables interrupts.</p>
+<p>So here's what actually is happening: for some reason, the hblank interrupt is
+being triggered while we're already handling the previous hblank interrupt.
+This also explains why the last hblank interrupt occurs after the vblank
+interrupt: it's the hblank interrupt for line 143!</p>
+<h1>Where Does It Go Wrong?</h1>
+<p>This answers some of our questions, but asks some new ones. Why is the hblank
+interrupt firing while we're already handling the previous one? If we look back
+in the logs we find this:</p>
+<pre><code> &gt;&gt; trigger STAT [LY: 128] [cy: 107856884]
+ &gt;&gt; LCD_STAT interrupt [...H]
+ (0x44 [LY]) = 0x81
+ (0x44 [LY]) = 0x81
+ (0x44 [LY]) = 0x81
+ (0x44 [LY]) = 0x81
+ (0x44 [LY]) = 0x81
+ (0x44 [LY]) = 0x81
+ (0x44 [LY]) = 0x81
+ (0x44 [LY]) = 0x81
+ (0x44 [LY]) = 0x81
+ (0x44 [LY]) = 0x81
+ &gt;&gt; trigger STAT [LY: 129] [cy: 107857340]
+ (0x44 [LY]) = 0x81
+ (0x44 [LY]) = 0x81
+ (0x44 [LY]) = 0x81
+ (0x44 [LY]) = 0x81
+ (0x44 [LY]) = 0x81
+ (0x44 [LY]) = 0x81
+ (0x44 [LY]) = 0x81
+ (0x44 [LY]) = 0x82
+ (0x43 [SCX], 0x1e)
+ (0x42 [SCY], 0x7f)
+ &gt;&gt; LCD_STAT interrupt [...H]
+ &gt;&gt; trigger STAT [LY: 130] [cy: 107857796]
+</code></pre>
+<p>Aha! This is where we flip from trigger=&gt;handle to handle=&gt;trigger. In
+between, we see that we must be in the same loop reading <code>LY</code> waiting for 82.
+But this one takes much longer than it normally does. Usually the loop only
+takes 1 or 2 reads before it gets to the next line (aside from when it
+hangs...)</p>
+<p>To figure out why this happens, we need a bit more information. Here's the real
+log output from the emulator:</p>
+<pre><code> 107856424: :&gt;&gt; trigger STAT [LY: 127] [cy: 107856428]
+ 107856428: :&gt;&gt; LCD_STAT interrupt [...H]
+ 107856608: :(0x44 [LY]) = 0x7f
+ 107856628: :(0x44 [LY]) = 0x80
+ ...
+ 107856880: :&gt;&gt; trigger STAT [LY: 128] [cy: 107856884]
+ 107856904: :&gt;&gt; LCD_STAT interrupt [...H]
+ 107857084: :(0x44 [LY]) = 0x81
+ 107857104: :(0x44 [LY]) = 0x81
+ 107857132: :(0x44 [LY]) = 0x81
+ ...
+</code></pre>
+<p>The number on the right is the current cycle count. The first hblank interrupt
+in this example is handled very quickly, $$ 107856428 - 107856424 = 4 $$ cycles
+after the interrupt is triggered.</p>
+<p>The second hblank interrupt is handled $$ 107856904 - 107856880 = 24 $$ cycles
+after it was triggered. Those extra 20 cycles mean that we miss the end of the
+previous line. Remember that our loop takes 32 cycles, so missing by 20 cycles
+is quite a lot.</p>
+<p>OK, so now we know why the hblank interrupt is firing after the hblank
+interrupt, and we know why the hblank interrupt is triggered after the previous
+hblank interrupt is handled. But why does the interrupt handler take 4 cycles
+some times and 24 cycles others? It all depends on what instruction is being
+executed when the interrupt is triggered. As we learned above, some
+instructions are fast (like <code>CP E</code> above, 4 cycles) and some instructions are
+slow (like <code>CALL</code>, 24 cycles). The interrupt is only handled when the
+instruction has finished, so a long running instruction can delay the interrupt
+being handled.</p>
+<p>While writing this, I had an interesting thought: what if I make the interrupt
+handler check for interrupts earlier than that? That is, what if we do
+something like this:</p>
+<ol>
+<li>Read initial byte of opcode</li>
+<li>If there are pending interrupts:
+<ol>
+<li>Stop executing that instruction</li>
+<li>Jump to the interrupt handler and start executing the new instruction</li>
+</ol>
+</li>
+<li>Else:
+<ol>
+<li>Execute the rest of the instruction</li>
+</ol>
+</li>
+</ol>
+<p>This is basically the same as triggering all interrupts 4 cycles earlier.
+Interestingly, when I run this:</p>
+<p><img src="/assets/2017-05-02-jmla09-works.gif" alt="jmla09 works"></p>
+<p><strong>W O R K S !</strong></p>
+<p>But it is the right fix? Well... that's the tricky part. It fixes this hang,
+and some other tests, but breaks some other tests. It also doesn't match the
+specified interrupt behavior of a Z80 CPU (the gameboy CPU is not a Z80, but is
+pretty close).</p>
+<h1>Epilogue</h1>
+<p>I started writing this blog post last week, expecting to start and finish it in
+a couple of days. Since I discovered this fix, I've been trying to figure out
+how to keep it working, and all the other tests, so I could have a really
+awesome finish to this blog post! But no such luck. I guess this is a more
+accurate ending, instead -- things are a little better here, a little worse
+there; the never-ending struggle of accuracy-driven emulator development.</p>
+
+  </div>
+</article>
+
+      </div>
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrapper">
+        <div class="footer-wrapper">
+          <ul class="footer">
+            <li>
+              by ben smith
+            </li>
+            <li>
+              <a href="https://github.com/binji"><span class="icon icon--github"><svg viewbox="0 0 16 16" width="16px" height="16px"><path fill="#828282" d="M7.999,0.431c-4.285,0-7.76,3.474-7.76,7.761 c0,3.428,2.223,6.337,5.307,7.363c0.388,0.071,0.53-0.168,0.53-0.374c0-0.184-0.007-0.672-0.01-1.32 c-2.159,0.469-2.614-1.04-2.614-1.04c-0.353-0.896-0.862-1.135-0.862-1.135c-0.705-0.481,0.053-0.472,0.053-0.472 c0.779,0.055,1.189,0.8,1.189,0.8c0.692,1.186,1.816,0.843,2.258,0.645c0.071-0.502,0.271-0.843,0.493-1.037 C4.86,11.425,3.049,10.76,3.049,7.786c0-0.847,0.302-1.54,0.799-2.082C3.768,5.507,3.501,4.718,3.924,3.65 c0,0,0.652-0.209,2.134,0.796C6.677,4.273,7.34,4.187,8,4.184c0.659,0.003,1.323,0.089,1.943,0.261 c1.482-1.004,2.132-0.796,2.132-0.796c0.423,1.068,0.157,1.857,0.077,2.054c0.497,0.542,0.798,1.235,0.798,2.082 c0,2.981-1.814,3.637-3.543,3.829c0.279,0.24,0.527,0.713,0.527,1.437c0,1.037-0.01,1.874-0.01,2.129 c0,0.208,0.14,0.449,0.534,0.373c3.081-1.028,5.302-3.935,5.302-7.362C15.76,3.906,12.285,0.431,7.999,0.431z"></path></svg>
+</span><span class="username">binji</span></a>
+
+              <a href="https://twitter.com/binjimint"><span class="icon icon--twitter"><svg viewbox="0 0 16 16" width="16px" height="16px"><path fill="#828282" d="M15.969,3.058c-0.586,0.26-1.217,0.436-1.878,0.515c0.675-0.405,1.194-1.045,1.438-1.809c-0.632,0.375-1.332,0.647-2.076,0.793c-0.596-0.636-1.446-1.033-2.387-1.033c-1.806,0-3.27,1.464-3.27,3.27 c0,0.256,0.029,0.506,0.085,0.745C5.163,5.404,2.753,4.102,1.14,2.124C0.859,2.607,0.698,3.168,0.698,3.767 c0,1.134,0.577,2.135,1.455,2.722C1.616,6.472,1.112,6.325,0.671,6.08c0,0.014,0,0.027,0,0.041c0,1.584,1.127,2.906,2.623,3.206 C3.02,9.402,2.731,9.442,2.433,9.442c-0.211,0-0.416-0.021-0.615-0.059c0.416,1.299,1.624,2.245,3.055,2.271 c-1.119,0.877-2.529,1.4-4.061,1.4c-0.264,0-0.524-0.015-0.78-0.046c1.447,0.928,3.166,1.469,5.013,1.469 c6.015,0,9.304-4.983,9.304-9.304c0-0.142-0.003-0.283-0.009-0.423C14.976,4.29,15.531,3.714,15.969,3.058z"></path></svg>
+</span><span class="username">binjimint</span></a>
+
+            </li>
+          </div>
+        <div>
+        <div class="footer-col-wrapper">
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

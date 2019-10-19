@@ -1,0 +1,2005 @@
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.6.2">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2019-10-18T20:31:16-07:00</updated><id>http://localhost:4000/</id><title type="html">binji’s dustbin</title><author><name>ben smith</name></author><entry><title type="html">making the maze race</title><link href="http://localhost:4000/2019/10/18/making-the-maze-race.html" rel="alternate" type="text/html" title="making the maze race" /><published>2019-10-18T18:00:00-07:00</published><updated>2019-10-18T18:00:00-07:00</updated><id>http://localhost:4000/2019/10/18/making-the-maze-race</id><content type="html" xml:base="http://localhost:4000/2019/10/18/making-the-maze-race.html"></content><author><name>ben smith</name></author><summary type="html"></summary></entry><entry><title type="html">Porting PaulStretch</title><link href="http://localhost:4000/2018/10/13/porting-paulstretch.html" rel="alternate" type="text/html" title="Porting PaulStretch" /><published>2018-10-13T02:30:00-07:00</published><updated>2018-10-13T02:30:00-07:00</updated><id>http://localhost:4000/2018/10/13/porting-paulstretch</id><content type="html" xml:base="http://localhost:4000/2018/10/13/porting-paulstretch.html">&lt;h1 id=&quot;paulstretch&quot;&gt;PaulStretch&lt;/h1&gt;</content><author><name>ben smith</name></author><summary type="html">PaulStretch</summary></entry><entry><title type="html">binjgb rewind</title><link href="http://localhost:4000/2017/12/31/binjgb-rewind.html" rel="alternate" type="text/html" title="binjgb rewind" /><published>2017-12-31T19:00:00-08:00</published><updated>2017-12-31T19:00:00-08:00</updated><id>http://localhost:4000/2017/12/31/binjgb-rewind</id><content type="html" xml:base="http://localhost:4000/2017/12/31/binjgb-rewind.html">&lt;p&gt;I stopped working on &lt;a href=&quot;https://github.com/binji/binjgb&quot;&gt;binjgb&lt;/a&gt;, and blogging, and other personal projects
+earlier this year. It’s a lot of work! And when the weather gets nice, it’s
+hard to stay inside and hack…&lt;/p&gt;
+
+&lt;p&gt;But in late June I picked up binjgb a bit and started working on a new feature:
+&lt;strong&gt;rewinding&lt;/strong&gt;.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;http://localhost:4000/assets/2017-12-31-rewind-sml.gif&quot; alt=&quot;rewind super mario land&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;I was inspired by a &lt;a href=&quot;https://www.reddit.com/r/programming/comments/662tgc/i_created_an_opensource_nes_emulator_that_can/?ref=share&amp;amp;ref_source=link&quot;&gt;reddit post&lt;/a&gt; announcing a new NES emulator called
+&lt;a href=&quot;http://nintaco.com/&quot;&gt;&lt;em&gt;nintaco&lt;/em&gt;&lt;/a&gt;. It actually has quite a few cool features,
+but the one that got the most attention was the ability to “rewind time”.&lt;/p&gt;
+
+&lt;p&gt;The top question in the reddit comments asks, how does it work? The answer:&lt;/p&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;It records controller input and it captures a save state at a fixed
+interval. For random access, it restores the nearest save state and then it
+uses the input sequence to fill in the gap. You can play for quite a few
+hours before filling up memory.&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;It’s a simple, straightforward solution, and it works well. I love when that
+happens!&lt;/p&gt;
+
+&lt;p&gt;It makes sense too: since the emulation is deterministic, as long as we record
+all sources of non-determinism we can fully recreate the emulation state at any
+point in time in the past.&lt;/p&gt;
+
+&lt;h1 id=&quot;step-0-save-state&quot;&gt;Step 0: Save State&lt;/h1&gt;
+
+&lt;p&gt;I actually had already implemented save state functionality. I wrote binjgb in
+C, and was very careful to keep all state in just one 51KiB struct,
+&lt;code class=&quot;highlighter-rouge&quot;&gt;EmulatorState&lt;/code&gt;. As a result, saving the state of the emulator was as simple as
+writing the contents of that struct to a file.&lt;/p&gt;
+
+&lt;div class=&quot;language-c highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;Result&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;emulator_write_state&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Emulator&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;e&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;FileData&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;file_data&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;CHECK&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;file_data&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;size&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;gt;=&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;sizeof&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;EmulatorState&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;));&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;e&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;state&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;header&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;SAVE_STATE_HEADER&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;memcpy&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;file_data&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;e&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;state&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;file_data&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;size&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;OK&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;ON_ERROR_RETURN&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;This has some caveats, of course. The save states are not necessarily
+compatible between different versions of binjgb, or even the same version of
+binjgb compiled with different C compilers. But in general it works, and it is
+very simple and efficient.&lt;/p&gt;
+
+&lt;h1 id=&quot;step-1-save-joypad-input&quot;&gt;Step 1: Save Joypad Input&lt;/h1&gt;
+
+&lt;p&gt;The gameboy, like the NES, doesn’t have much to save for joypad input. There
+are just 4 buttons (A, B, Start, Select), and 4 directional inputs, for a total
+of 8 bits.&lt;/p&gt;
+
+&lt;p&gt;You could store this info once per frame and never notice the memory usage. The
+gameboy runs at ~59.7 frames/second, which means that at 1 byte/frame, I would
+use 60b/sec = 3.5KiB/min = 84KiB/hour = 5MiB/day. But I didn’t do it this way.&lt;/p&gt;
+
+&lt;p&gt;binjgb actually uses a callback to ask what the current input state is whenever
+the emulated gameboy would. This can happen at any time during a frame, and
+often happens multiple times. This means that the values could change over the
+course of a frame, so I actually want cycle granularity for inputs.&lt;/p&gt;
+
+&lt;p&gt;Since the gameboy runs at ~4MHz, I probably shouldn’t store the input for each
+cycle (4MiB/sec = 240MiB/min = 14GiB/hour.)&lt;/p&gt;
+
+&lt;p&gt;Instead, I rely on the fact that the input rarely changes and just store the
+new input whenever it does, along with when it happened. In binjgb, the cycle
+count is stored as a 64-bit value. Adding 1 byte for the input (and padding)
+gives 12 bytes per entry. It would be simple enough to use a dynamic array for
+this, but for no particular reason I decided to use a doubly-linked list of
+fixed buffers instead.&lt;/p&gt;
+
+&lt;div class=&quot;language-c highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;typedef&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;struct&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;Cycles&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;cycles&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;u8&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;buttons&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;u8&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;padding&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;3&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;];&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;JoypadState&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+
+&lt;span class=&quot;k&quot;&gt;typedef&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;struct&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;JoypadBuffer&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;JoypadState&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+  &lt;span class=&quot;kt&quot;&gt;size_t&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;size&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+  &lt;span class=&quot;kt&quot;&gt;size_t&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;capacity&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;struct&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;JoypadBuffer&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;next&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;prev&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;JoypadBuffer&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Just to give you an idea, after playing through the first four levels of Super
+Mario Land (in about 4 minutes – a speedrunner I am not) this uses about
+12.5KiB. This gives me memory usage rates in the same ballpark as before when
+storing just one byte per frame.&lt;/p&gt;
+
+&lt;h1 id=&quot;step-2-continuously-save-states&quot;&gt;Step 2: Continuously Save States&lt;/h1&gt;
+
+&lt;p&gt;So the simple, straightforward idea above was to save emulator state at a fixed
+interval. But as I did the calculations, it left me a bit unsatisfied. Since
+the save state is 51KiB, that means that if I saved the state every frame, it
+would require 3MiB/sec = 175MiB/min = 10GiB/hour.&lt;/p&gt;
+
+&lt;p&gt;It seemed I could improve this a few ways: saving the state less often, or
+compressing the state so it is smaller, or both.&lt;/p&gt;
+
+&lt;h1 id=&quot;step-21-save-state-less-often&quot;&gt;Step 2.1: Save State Less Often&lt;/h1&gt;
+
+&lt;p&gt;Even though rewinding doesn’t need to be realtime, I really wanted to keep it
+realtime if I could. If I save state less often, then the only way to make that
+work is to simulate more. I haven’t spent too much time optimizing it, but
+binjgb is pretty fast, even in debug mode. Running the simulation without any
+graphics yields a framerate of about 600fps with debugging information. That’s
+measuring &lt;em&gt;gameboy&lt;/em&gt; frames. Since I want to rewind at 60fps, that means I can
+simulate at about 10gbfpf: 10 gameboy frames per frame.&lt;/p&gt;
+
+&lt;p&gt;So if I save states 1/10th as often, then it would only be 300KiB/sec. Pretty
+good, but I wanted to do better.&lt;/p&gt;
+
+&lt;h1 id=&quot;step-22-compress-save-states&quot;&gt;Step 2.2: Compress Save States&lt;/h1&gt;
+
+&lt;p&gt;I could have just used &lt;a href=&quot;https://zlib.net&quot;&gt;zlib&lt;/a&gt; and been done with it, but I’ve been trying to
+keep the number of dependencies to a minimum, so I wondered if there was
+another way.&lt;/p&gt;
+
+&lt;p&gt;The save state is 51KiB, but what is actually saved? It turns out that most of
+this (32KiB) is used for EXT RAM, i.e. battery-backed RAM. 32KiB is the maximum
+size, and even though most carts don’t use that much, having a fixed-size
+buffer is convenient for keeping the save state simple. If the buffer were
+variable-size, it would have to be a allocated, which means it would be stored
+as a pointer, which means I can’t &lt;code class=&quot;highlighter-rouge&quot;&gt;memcpy&lt;/code&gt; it to a file.&lt;/p&gt;
+
+&lt;p&gt;What this means is that the 32KiB state is mostly zero, same with the 8KiB of
+work RAM. Given that, a simple &lt;a href=&quot;https://en.wikipedia.org/wiki/Run-length_encoding&quot;&gt;Run Length Encoding&lt;/a&gt; (RLE) scheme should work
+well. As an experiment, I had binjgb save the emulator state once per frame to
+a set of files, and did some analysis.&lt;/p&gt;
+
+&lt;h1 id=&quot;step-23-rle&quot;&gt;Step 2.3: RLE&lt;/h1&gt;
+
+&lt;p&gt;There are a many different ways you can do RLE encoding, so I tried a couple
+them with the extracted save states. They all use the same basic idea: find
+runs of the same number in the input stream and compress them to a pair of the
+number and the length of the run.&lt;/p&gt;
+
+&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;def&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;FindRuns&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;s&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;last&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;start&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;in_run&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;bp&quot;&gt;None&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;x&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;enumerate&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;s&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;match&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;x&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;last&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;match&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;!=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;in_run&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+      &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;in_run&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;is&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;not&lt;/span&gt; &lt;span class=&quot;bp&quot;&gt;None&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+        &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;in_run&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+          &lt;span class=&quot;k&quot;&gt;yield&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;'run'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;i&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;start&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;last&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+        &lt;span class=&quot;k&quot;&gt;elif&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;i&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;start&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+          &lt;span class=&quot;k&quot;&gt;yield&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;'norun'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;s&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;start&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;])&lt;/span&gt;
+
+      &lt;span class=&quot;n&quot;&gt;in_run&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;match&lt;/span&gt;
+      &lt;span class=&quot;n&quot;&gt;start&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;
+
+    &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;not&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;match&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+      &lt;span class=&quot;n&quot;&gt;last&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;x&lt;/span&gt;
+
+  &lt;span class=&quot;n&quot;&gt;i&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;
+
+  &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;in_run&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;yield&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;'run'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;i&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;start&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;last&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;elif&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;i&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;start&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;yield&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;'norun'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;s&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;start&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;])&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Not the most elegant code, but it is fine for a prototype. This function will
+take the input and yield tuples a tuples of either &lt;code class=&quot;highlighter-rouge&quot;&gt;('run', length, value)&lt;/code&gt; or
+&lt;code class=&quot;highlighter-rouge&quot;&gt;('norun', [value0, value1, ...])&lt;/code&gt;.&lt;/p&gt;
+
+&lt;p&gt;The simplest way to encode RLE is to just store &lt;code class=&quot;highlighter-rouge&quot;&gt;length&lt;/code&gt; &lt;code class=&quot;highlighter-rouge&quot;&gt;value&lt;/code&gt; pairs, using a
+length of &lt;code class=&quot;highlighter-rouge&quot;&gt;1&lt;/code&gt; for each value that isn’t in a run.&lt;/p&gt;
+
+&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;def&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;RLE1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;s&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;data&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;[]&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;r&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;FindRuns&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;s&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;r&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;'run'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+      &lt;span class=&quot;n&quot;&gt;count&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;value&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;r&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:]&lt;/span&gt;
+      &lt;span class=&quot;k&quot;&gt;while&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;count&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;255&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;extend&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;([&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;255&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;value&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;])&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;count&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;255&lt;/span&gt;
+      &lt;span class=&quot;n&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;extend&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;([&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;count&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;value&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;])&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;else&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+      &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;x&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;r&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]:&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;extend&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;([&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;x&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;])&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;bytearray&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+
+&lt;span class=&quot;c&quot;&gt;#  input: 1 2 3 4 4 4 4 4 1 1 2 3&lt;/span&gt;
+&lt;span class=&quot;c&quot;&gt;# output: 1 1 1 2 1 3 5 4 2 1 1 2 1 3&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;But this method of doing RLE is inefficient with non-runs. Instead, there is a
+common trick that saves space: non-run values are stored directly in the output
+stream, and runs are stored by storing the same value twice, then following
+that with the remaining length. So a run of 5s with length 10 would be stored
+as &lt;code class=&quot;highlighter-rouge&quot;&gt;5 5 8&lt;/code&gt;.&lt;/p&gt;
+
+&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;def&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;RLE2&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;s&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;data&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;[]&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;r&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;FindRuns&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;s&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;r&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;'run'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+      &lt;span class=&quot;n&quot;&gt;count&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;value&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;r&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:]&lt;/span&gt;
+      &lt;span class=&quot;k&quot;&gt;while&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;count&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;257&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;extend&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;([&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;value&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;value&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;255&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;])&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;count&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;257&lt;/span&gt;
+      &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;count&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;count&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;extend&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;([&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;value&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;value&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;count&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;])&lt;/span&gt;
+      &lt;span class=&quot;k&quot;&gt;elif&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;count&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;append&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;value&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;else&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+      &lt;span class=&quot;n&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;extend&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;r&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;])&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;bytearray&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+
+&lt;span class=&quot;c&quot;&gt;#  input: 1 2 3 4 4 4 4 4 1 1 2 3&lt;/span&gt;
+&lt;span class=&quot;c&quot;&gt;# output: 1 2 3 4 4 3 1 1 0 2 3&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Since I expected that the long runs of zeroes would have length greater than
+255, I also had alternate encoders that used &lt;a href=&quot;https://en.wikipedia.org/wiki/LEB128&quot;&gt;LEB128&lt;/a&gt; variable-length integer
+encoding.&lt;/p&gt;
+
+&lt;p&gt;Testing these four compressors over Donkey Kong running for 4000 frames (and
+using zlib compression as a baseline) gives the following results:&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;Compressor&lt;/th&gt;
+      &lt;th&gt;Size/Frame&lt;/th&gt;
+      &lt;th&gt;Size/Sec&lt;/th&gt;
+      &lt;th&gt;Compression Ratio&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;RLE1&lt;/td&gt;
+      &lt;td&gt;11.8KiB&lt;/td&gt;
+      &lt;td&gt;704KiB/sec&lt;/td&gt;
+      &lt;td&gt;23.6%&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;RLE1 (LEB128)&lt;/td&gt;
+      &lt;td&gt;11.5KiB&lt;/td&gt;
+      &lt;td&gt;687KiB/sec&lt;/td&gt;
+      &lt;td&gt;23.0%&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;RLE2&lt;/td&gt;
+      &lt;td&gt;7.3KiB&lt;/td&gt;
+      &lt;td&gt;436KiB/sec&lt;/td&gt;
+      &lt;td&gt;14.6%&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;RLE2 (LEB128)&lt;/td&gt;
+      &lt;td&gt;6.8KiB&lt;/td&gt;
+      &lt;td&gt;406KiB/sec&lt;/td&gt;
+      &lt;td&gt;13.7%&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;zlib&lt;/td&gt;
+      &lt;td&gt;3.9KiB&lt;/td&gt;
+      &lt;td&gt;232KiB/sec&lt;/td&gt;
+      &lt;td&gt;7.8%&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;h1 id=&quot;step-24-compressing-intermediate-frames&quot;&gt;Step 2.4: Compressing Intermediate Frames&lt;/h1&gt;
+
+&lt;p&gt;The zlib size is pretty good, but I figured I could do better taking into
+account the similarity between frames, similar to a video codec. If I store the
+per-byte difference between the current frame and a previous frame, then
+compress that, then the regions that didn’t change will have long runs of zero.&lt;/p&gt;
+
+&lt;p&gt;The only thing to decide is how often to store base frames. I started with
+storing a base frame every 120 frames (~2 seconds), and compressing this
+difference with the same compressor. Since using LEB128 was always better, I
+only tested those. This gives the following results:&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;Compressor&lt;/th&gt;
+      &lt;th&gt;Size/Frame&lt;/th&gt;
+      &lt;th&gt;Size/Sec&lt;/th&gt;
+      &lt;th&gt;Compression Ratio&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;RLE1 (LEB128)&lt;/td&gt;
+      &lt;td&gt;1.01KiB&lt;/td&gt;
+      &lt;td&gt;60.4KiB/sec&lt;/td&gt;
+      &lt;td&gt;2.03%&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;RLE2 (LEB128)&lt;/td&gt;
+      &lt;td&gt;712bytes&lt;/td&gt;
+      &lt;td&gt;41.5KiB/sec&lt;/td&gt;
+      &lt;td&gt;1.39%&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;zlib&lt;/td&gt;
+      &lt;td&gt;597bytes&lt;/td&gt;
+      &lt;td&gt;34.8KiB/sec&lt;/td&gt;
+      &lt;td&gt;1.17%&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;&lt;strong&gt;A 10x improvement for RLE!!&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;What was interesting to me about this is the difference between RLE2 and zlib:
+it turns out that even though the compression of zlib is much better for base
+frames, it isn’t much better for the intermediate frames.&lt;/p&gt;
+
+&lt;p&gt;Since I showed that, at least for Donkey Kong, I could get 41.5KiB/sec for the
+first 4000 frames (~67 sec) of play, I decided it was time to start on the real
+implementation.&lt;/p&gt;
+
+&lt;h1 id=&quot;step-25-storing-the-base-and-intermediate-frames&quot;&gt;Step 2.5: Storing the Base and Intermediate Frames&lt;/h1&gt;
+
+&lt;p&gt;The simplest way to store the base and intermediate frames is to store pointers
+to the data in a struct, then have a dynamic array of that struct. The only
+operations I need to implement are append and lookup, and I know that append
+happens a lot (once per frame), and lookup happens rarely (only during a
+rewind.)&lt;/p&gt;
+
+&lt;p&gt;But I didn’t want to do this, since memory would grow unbounded. It’s not too
+bad, but even at 41.5KiB/sec, that means 145MiB/hour which is OK for desktop
+but pretty big for a web app.&lt;/p&gt;
+
+&lt;p&gt;What I really wanted was a circular buffer, but also be able to lookup in the
+circular buffer in sublinear time. It &lt;em&gt;is&lt;/em&gt; possible to perform a binary search
+on a circular buffer, but only with a fixed-size element.&lt;/p&gt;
+
+&lt;p&gt;But in my case, since the base and intermediate frames are compressed, they
+will have different sizes. Even if I store the frames in sorted order, I won’t
+be able to binary search since I wouldn’t be able to find the middle element.
+But what if I separate each element into two parts: a fixed-size part
+(&lt;code class=&quot;highlighter-rouge&quot;&gt;RewindInfo&lt;/code&gt;) and a variable-size part (&lt;code class=&quot;highlighter-rouge&quot;&gt;RewindData&lt;/code&gt;)?&lt;/p&gt;
+
+&lt;div class=&quot;language-c highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;typedef&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;u8&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;RewindData&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+
+&lt;span class=&quot;k&quot;&gt;typedef&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;enum&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;RewindInfoKind_Base&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;RewindInfoKind_Diff&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;RewindInfoKind&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+
+&lt;span class=&quot;k&quot;&gt;typedef&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;struct&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;Cycles&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;cycles&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;RewindData&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+  &lt;span class=&quot;kt&quot;&gt;size_t&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;size&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;RewindInfoKind&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;kind&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;RewindInfo&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Since I only have two kinds of elements in the buffer, I can use an old trick
+to store them in the same buffer: &lt;code class=&quot;highlighter-rouge&quot;&gt;RewindData&lt;/code&gt; grows from one end of the buffer
+and &lt;code class=&quot;highlighter-rouge&quot;&gt;RewindInfo&lt;/code&gt; grows from the other end.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;http://localhost:4000/assets/2017-12-31-info-data-growing-from-opposite-ends.png&quot; alt=&quot;info/data growing from opposite ends&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Since the &lt;code class=&quot;highlighter-rouge&quot;&gt;RewindData&lt;/code&gt; is variable-size, it’s easier if I have it grow
+normally, from low to high addresses. Otherwise I’d have to write the
+compressed data backward, or somehow guess how big the compressed buffer will
+be. So the &lt;code class=&quot;highlighter-rouge&quot;&gt;RewindInfo&lt;/code&gt; will grow backward, from high addresses to low
+addresses.&lt;/p&gt;
+
+&lt;h1 id=&quot;step-26-handling-buffer-overflow&quot;&gt;Step 2.6: Handling Buffer Overflow&lt;/h1&gt;
+
+&lt;p&gt;A normal circular buffer will wrap around and overwrite previous values when
+the buffer overflows. That happens with this buffer too, with some subtle
+differences.&lt;/p&gt;
+
+&lt;p&gt;First off, there are two times when the buffer overflows: when writing the
+&lt;code class=&quot;highlighter-rouge&quot;&gt;RewindInfo&lt;/code&gt; and when writing the &lt;code class=&quot;highlighter-rouge&quot;&gt;RewindData&lt;/code&gt;. Ultimately, it doesn’t really
+matter which write fails since they both must be successful to continue. If
+either fails, then I need to wrap around to the beginning to write the next
+info/data pair. When this pair is written, it will overwrite a previously
+written &lt;code class=&quot;highlighter-rouge&quot;&gt;RewindInfo&lt;/code&gt; and &lt;code class=&quot;highlighter-rouge&quot;&gt;RewindData&lt;/code&gt;. The &lt;code class=&quot;highlighter-rouge&quot;&gt;RewindInfo&lt;/code&gt; is fixed-size, so it
+can be overwritten without any further work. But the &lt;code class=&quot;highlighter-rouge&quot;&gt;RewindData&lt;/code&gt; is
+variable-size so there are three cases to consider: when the new data’s size is
+less than, equal, or greater than the old data’s size.&lt;/p&gt;
+
+&lt;p&gt;The trivial case is when the sizes are equal and no further work needs to be
+done. If the new data’s size is smaller, a gap of unused data, equal to the
+difference in size between the old and new data, will now exist. This doesn’t
+really matter though, because I never access the data directly, only through a
+pointer in the &lt;code class=&quot;highlighter-rouge&quot;&gt;RewindInfo&lt;/code&gt; struct.&lt;/p&gt;
+
+&lt;p&gt;If the new data size is larger than the old data size, then writing the new
+data will likely overwrite data from the following &lt;code class=&quot;highlighter-rouge&quot;&gt;RewindInfo&lt;/code&gt; structs. (It’s
+not guaranteed since, as mentioned above, there may be a gap of unused data
+after.) When this happens, those &lt;code class=&quot;highlighter-rouge&quot;&gt;RewindInfo&lt;/code&gt; structs are now invalid, so they
+must be removed. Therefore there is now a gap of unused data in the
+&lt;code class=&quot;highlighter-rouge&quot;&gt;RewindInfo&lt;/code&gt; list.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;http://localhost:4000/assets/2017-12-31-rewindinfo-invalidation.png&quot; alt=&quot;RewindInfo invalidation&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;There are a few ways to solve this, but I believe the simplest is to split the
+&lt;code class=&quot;highlighter-rouge&quot;&gt;RewindInfo&lt;/code&gt; and &lt;code class=&quot;highlighter-rouge&quot;&gt;RewindData&lt;/code&gt; areas of the buffer into two ranges:&lt;/p&gt;
+
+&lt;div class=&quot;language-c highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;typedef&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;struct&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;u8&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;begin&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;u8&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;end&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;RewindDataRange&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+
+&lt;span class=&quot;k&quot;&gt;typedef&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;struct&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;RewindInfo&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;begin&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;RewindInfo&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;end&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;RewindInfoRange&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+
+&lt;span class=&quot;k&quot;&gt;typedef&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;struct&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;RewindDataRange&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;data_range&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;];&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;RewindInfoRange&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;info_range&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;];&lt;/span&gt;
+  &lt;span class=&quot;p&quot;&gt;...&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;RewindBuffer&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;The ranges are always ordered as follows:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;http://localhost:4000/assets/2017-12-31-info-data-range-ordering.png&quot; alt=&quot;info/data range ordering&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;The data pointers in &lt;code class=&quot;highlighter-rouge&quot;&gt;info_range[i]&lt;/code&gt; always point into &lt;code class=&quot;highlighter-rouge&quot;&gt;data_range[i]&lt;/code&gt;, where
+&lt;code class=&quot;highlighter-rouge&quot;&gt;i&lt;/code&gt; is either &lt;code class=&quot;highlighter-rouge&quot;&gt;0&lt;/code&gt; or &lt;code class=&quot;highlighter-rouge&quot;&gt;1&lt;/code&gt;.&lt;/p&gt;
+
+&lt;p&gt;New &lt;code class=&quot;highlighter-rouge&quot;&gt;RewindInfo&lt;/code&gt; is always added to the beginning of &lt;code class=&quot;highlighter-rouge&quot;&gt;info_range[0]&lt;/code&gt;, possibly
+overwriting &lt;code class=&quot;highlighter-rouge&quot;&gt;RewindInfo&lt;/code&gt; at then end of &lt;code class=&quot;highlighter-rouge&quot;&gt;info_range[1]&lt;/code&gt;. Similarly, new
+&lt;code class=&quot;highlighter-rouge&quot;&gt;RewindData&lt;/code&gt; is always added to the end of &lt;code class=&quot;highlighter-rouge&quot;&gt;data_range[0]&lt;/code&gt;. At the start,
+&lt;code class=&quot;highlighter-rouge&quot;&gt;data_range[1]&lt;/code&gt; and &lt;code class=&quot;highlighter-rouge&quot;&gt;info_range[1]&lt;/code&gt; are empty, so prepending to &lt;code class=&quot;highlighter-rouge&quot;&gt;info_range[0]&lt;/code&gt;
+and appending to &lt;code class=&quot;highlighter-rouge&quot;&gt;data_range[0]&lt;/code&gt; will just push the empty ranges toward the
+center of the buffer:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;http://localhost:4000/assets/2017-12-31-empty-ranges.png&quot; alt=&quot;empty ranges&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;When the buffer is full, &lt;code class=&quot;highlighter-rouge&quot;&gt;info_range[0]&lt;/code&gt; and &lt;code class=&quot;highlighter-rouge&quot;&gt;data_range[0]&lt;/code&gt; are copied into
+&lt;code class=&quot;highlighter-rouge&quot;&gt;info_range[1]&lt;/code&gt; and &lt;code class=&quot;highlighter-rouge&quot;&gt;data_range[1]&lt;/code&gt;. The underlying data in the buffer doesn’t
+change, just the members of the &lt;code class=&quot;highlighter-rouge&quot;&gt;Range&lt;/code&gt; structs. Then &lt;code class=&quot;highlighter-rouge&quot;&gt;info_range[0]&lt;/code&gt; and
+&lt;code class=&quot;highlighter-rouge&quot;&gt;data_range[0]&lt;/code&gt; are reset to empty ranges at the end and beginning of the
+buffer, respectively.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;http://localhost:4000/assets/2017-12-31-info-data-overflow.png&quot; alt=&quot;info/data overflow&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;As before, &lt;code class=&quot;highlighter-rouge&quot;&gt;RewindInfo&lt;/code&gt; and &lt;code class=&quot;highlighter-rouge&quot;&gt;RewindData&lt;/code&gt; is written to the beginning
+&lt;code class=&quot;highlighter-rouge&quot;&gt;info_range[0]&lt;/code&gt; and end of &lt;code class=&quot;highlighter-rouge&quot;&gt;data_range[0]&lt;/code&gt;. But now they may also overwrite
+&lt;code class=&quot;highlighter-rouge&quot;&gt;info_range[1]&lt;/code&gt; and &lt;code class=&quot;highlighter-rouge&quot;&gt;data_range[1]&lt;/code&gt;. When this happens, those ranges are
+shrunk, making sure this invariant is kept:&lt;/p&gt;
+
+&lt;div class=&quot;language-c highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;info_range&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;].&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;end&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;].&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;data&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;data_range&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;].&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;begin&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Here’s an animation of the first 20 seconds of Donkey Kong, using a 128KiB
+buffer. The lighter colors are used for range &lt;code class=&quot;highlighter-rouge&quot;&gt;0&lt;/code&gt; and the darker colors for
+range &lt;code class=&quot;highlighter-rouge&quot;&gt;1&lt;/code&gt;.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;http://localhost:4000/assets/2017-12-31-rewind-animation.gif&quot; alt=&quot;rewind animation&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;There’s some additional subtlety required (choosing intermediate vs. base
+states, keeping an uncompressed copy of the last base state, etc.) but this
+covers the most important parts of the rewind buffer data structure. Once I had
+written this, I was almost done. Just needed to write the rewinding code. So of
+course I stopped working on it for a few months.&lt;/p&gt;
+
+&lt;h1 id=&quot;step-3-rewinding&quot;&gt;Step 3: Rewinding&lt;/h1&gt;
+
+&lt;p&gt;When I came back to working on binjgb, I was determined to finish the rewind
+feature. At this point, I had enough information to do exactly what nintaco
+did:&lt;/p&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;For random access, it restores the nearest save state and then it uses the
+input sequence to fill in the gap.&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;So, to rewind to a given cycle count &lt;code class=&quot;highlighter-rouge&quot;&gt;cycle&lt;/code&gt;, do the following:&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;If &lt;code class=&quot;highlighter-rouge&quot;&gt;cycle&lt;/code&gt; &amp;lt; &lt;code class=&quot;highlighter-rouge&quot;&gt;info_range[1].end[-1].cycle&lt;/code&gt;, then this &lt;code class=&quot;highlighter-rouge&quot;&gt;cycle&lt;/code&gt; is too old;
+error.&lt;/li&gt;
+  &lt;li&gt;Determine which &lt;code class=&quot;highlighter-rouge&quot;&gt;info_range&lt;/code&gt; contains &lt;code class=&quot;highlighter-rouge&quot;&gt;cycle&lt;/code&gt;. Note that the &lt;code class=&quot;highlighter-rouge&quot;&gt;cycle&lt;/code&gt; may be
+newer than the most recent saved state; in that case, use &lt;code class=&quot;highlighter-rouge&quot;&gt;info_range[0]&lt;/code&gt;.&lt;/li&gt;
+  &lt;li&gt;Binary search the range (which is guaranteed to have at least one element),
+assign the result to &lt;code class=&quot;highlighter-rouge&quot;&gt;found&lt;/code&gt;.&lt;/li&gt;
+  &lt;li&gt;If &lt;code class=&quot;highlighter-rouge&quot;&gt;found&lt;/code&gt; is a base state:
+    &lt;ol&gt;
+      &lt;li&gt;Decompress the data in &lt;code class=&quot;highlighter-rouge&quot;&gt;found-&amp;gt;data&lt;/code&gt;.&lt;/li&gt;
+      &lt;li&gt;Load the decompressed save state.&lt;/li&gt;
+    &lt;/ol&gt;
+  &lt;/li&gt;
+  &lt;li&gt;Else, &lt;code class=&quot;highlighter-rouge&quot;&gt;found&lt;/code&gt; must be an intermediate state:
+    &lt;ol&gt;
+      &lt;li&gt;Find the previous base state by searching backward through the range,
+assigning the result to &lt;code class=&quot;highlighter-rouge&quot;&gt;base&lt;/code&gt;.&lt;/li&gt;
+      &lt;li&gt;If it is not found and the range is &lt;code class=&quot;highlighter-rouge&quot;&gt;info_range[0]&lt;/code&gt;:
+        &lt;ol&gt;
+          &lt;li&gt;Search through &lt;code class=&quot;highlighter-rouge&quot;&gt;info_range[1]&lt;/code&gt;, assign the result to &lt;code class=&quot;highlighter-rouge&quot;&gt;base&lt;/code&gt;.&lt;/li&gt;
+        &lt;/ol&gt;
+      &lt;/li&gt;
+      &lt;li&gt;If &lt;code class=&quot;highlighter-rouge&quot;&gt;base&lt;/code&gt; is was not found; error.&lt;/li&gt;
+      &lt;li&gt;Decompress the base state data in &lt;code class=&quot;highlighter-rouge&quot;&gt;base-&amp;gt;data&lt;/code&gt;.&lt;/li&gt;
+      &lt;li&gt;Decompress the intermediate data in &lt;code class=&quot;highlighter-rouge&quot;&gt;found-&amp;gt;data&lt;/code&gt;, adding each
+decompressed byte to the byte at the same index in the base state.&lt;/li&gt;
+      &lt;li&gt;Load the decompressed save state.&lt;/li&gt;
+    &lt;/ol&gt;
+  &lt;/li&gt;
+  &lt;li&gt;Find the joypad data for the current cycle count (which just changed because
+we loaded a save state).&lt;/li&gt;
+  &lt;li&gt;Run the emulator forward until &lt;code class=&quot;highlighter-rouge&quot;&gt;cycle&lt;/code&gt;, starting from the joypad data found
+in the previous step.&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;The final step is to remove any states after &lt;code class=&quot;highlighter-rouge&quot;&gt;found&lt;/code&gt;. This is necesary to
+prevent rewinding to an invalid state. As soon as the player continues playing,
+new data will be written to the rewind buffer. These new states represent a
+parallel universe – a fork in the timeline. Appending these would mean that
+time is no longer linear and ordered in the buffer, so binary search won’t
+work.&lt;/p&gt;
+
+&lt;p&gt;I separated the final step out into another function so I can support a rewind
+mode in the debugger. This way, you can call &lt;code class=&quot;highlighter-rouge&quot;&gt;host_begin_rewind&lt;/code&gt; and seek
+through all previous save states. When you find the state you want to rewind
+to, you can call &lt;code class=&quot;highlighter-rouge&quot;&gt;host_end_rewind&lt;/code&gt; and continue playing.&lt;/p&gt;
+
+&lt;video src=&quot;http://localhost:4000/assets/2017-12-31-rewind-scrub.mp4&quot; controls=&quot;&quot;&gt;
+&lt;/video&gt;
+
+&lt;p&gt;You can see some of the final rewind buffer stats at the bottom of this video.
+The rate during gameplay is closer to 70KiB/sec instead of 40KiB/sec I
+calculated above, but I’m still pretty happy with the result.&lt;/p&gt;
+
+&lt;h1 id=&quot;step-4-enjoy&quot;&gt;Step 4: Enjoy!!&lt;/h1&gt;
+
+&lt;p&gt;Once I had rewind working, I wired it up to a hotkey and just started playing,
+rewinding away my many mistakes.&lt;/p&gt;
+
+&lt;p&gt;:smile:&lt;/p&gt;
+
+&lt;p&gt;I really wanted to finish this post before the end of the year, and it seems
+like I just made it (in my time zone anyway.)&lt;/p&gt;
+
+&lt;p&gt;Happy New Year everyone!&lt;/p&gt;</content><author><name>ben smith</name></author><summary type="html">I stopped working on binjgb, and blogging, and other personal projects earlier this year. It’s a lot of work! And when the weather gets nice, it’s hard to stay inside and hack…</summary></entry><entry><title type="html">WebAssembly at GOTO Stockholm</title><link href="http://localhost:4000/2017/05/23/goto-stockholm.html" rel="alternate" type="text/html" title="WebAssembly at GOTO Stockholm" /><published>2017-05-23T08:00:00-07:00</published><updated>2017-05-23T08:00:00-07:00</updated><id>http://localhost:4000/2017/05/23/goto-stockholm</id><content type="html" xml:base="http://localhost:4000/2017/05/23/goto-stockholm.html">&lt;p&gt;Earlier this year, I was contacted on Twitter by the GOTO Stockholm organizer.
+He had seen my talk at FullStackFest, and asked if I’d like to give a talk
+about WebAssembly. I haven’t given too many talks, but I always find it to be a
+fun experience. Because I’m relatively inexperienced speaker, I treat each talk
+as an experiment and try to do something new for each one. Usually a new topic,
+but also a new demo or a new way of doing my slides. It often becomes my
+primary non-work project, but the difference is that it has a hard deadline,
+where most of my non-work projects I can just drop and no one cares (or even
+knows.)&lt;/p&gt;
+
+&lt;p&gt;The theme of the event was “Post-JavaScript”, so having a WebAssembly talk
+makes sense. This doesn’t mean that WebAssembly will rise triumphant from
+JavaScript’s destruction, but more that WebAssembly was born to meet demands
+that JavaScript was struggling to provide. Anyway, the theme of my talk was
+open otherwise, so I started to consider what I wanted to talk about. I’d only
+have thirty minutes, so I wouldn’t be able to go into too much detail.&lt;/p&gt;
+
+&lt;p&gt;I noticed that many people were giving WebAssembly talks, and they were
+answering similar questions: What is WebAssembly? What is it for? Why would you
+use it over JavaScript? What makes it different from JavaScript? I figured I
+would give a talk that was slightly different, focusing on how WebAssembly
+enables new languages to be run on the web platform.&lt;/p&gt;
+
+&lt;p&gt;At the same time, I started thinking about what would make this talk different.
+At first I thought I would do a live-coding demo of WebAssembly. I’ve always
+wanted to do some live-coding as part of a talk, and I think with the right
+demo framework it could be pretty cool. I started working on cleaning up the
+wabt wast2wasm demo, which converts from WebAssembly text format to WebAssembly
+binary format. I thought it would be pretty cool if you could write
+WebAssembly, convert it to binary form, and run it as a software fragment
+shader: the function you wrote would be run for each pixel of a canvas and
+determine its color. This didn’t really fit with my chosen theme, though, so I
+shelved the idea.&lt;/p&gt;
+
+&lt;p&gt;Finally, I decided to borrow an idea – funny because I wanted my talk to be
+different – to use a hand-drawn cartoon style. I really enjoyed the look of
+Lin Clark’s “A Cartoon Intro to WebAssembly,” but I’m not a very skilled
+artist. But I can trace pictures; would that look good?&lt;/p&gt;
+
+&lt;p&gt;I worked on a quick experiment using the WebAssembly logo:&lt;/p&gt;
+
+&lt;p&gt;First, I loaded the image in GIMP:&lt;/p&gt;
+
+&lt;p&gt;Then I created a new layer, reduced the opacity of the other layer, and started
+tracing over it:&lt;/p&gt;
+
+&lt;p&gt;Then I created another layer and did it again:&lt;/p&gt;
+
+&lt;p&gt;Finally, I removed the original image layer and used the GIMP export GIF
+feature to generate an animation from layers:&lt;/p&gt;</content><author><name>ben smith</name></author><summary type="html">Earlier this year, I was contacted on Twitter by the GOTO Stockholm organizer. He had seen my talk at FullStackFest, and asked if I’d like to give a talk about WebAssembly. I haven’t given too many talks, but I always find it to be a fun experience. Because I’m relatively inexperienced speaker, I treat each talk as an experiment and try to do something new for each one. Usually a new topic, but also a new demo or a new way of doing my slides. It often becomes my primary non-work project, but the difference is that it has a hard deadline, where most of my non-work projects I can just drop and no one cares (or even knows.)</summary></entry><entry><title type="html">debugging hangs</title><link href="http://localhost:4000/2017/05/03/debugging-hangs.html" rel="alternate" type="text/html" title="debugging hangs" /><published>2017-05-03T03:09:00-07:00</published><updated>2017-05-03T03:09:00-07:00</updated><id>http://localhost:4000/2017/05/03/debugging-hangs</id><content type="html" xml:base="http://localhost:4000/2017/05/03/debugging-hangs.html">&lt;script type=&quot;text/javascript&quot; src=&quot;https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML&quot;&gt;
+&lt;/script&gt;
+
+&lt;h1 id=&quot;running-pouët-demos&quot;&gt;Running pouët Demos&lt;/h1&gt;
+
+&lt;p&gt;I recently tested some public domain gameboy demos from &lt;a href=&quot;https://www.pouet.net&quot;&gt;pouet.net&lt;/a&gt; with
+binjgb. They’re good to run as tests because they’re pretty fun, and often do
+weirder stuff than a commercial game would do.&lt;/p&gt;
+
+&lt;p&gt;One of my favorites is &lt;a href=&quot;https://www.pouet.net/prod.php?which=65997&quot;&gt;“Is That a Demo in Your Pocket”&lt;/a&gt; by
+snorpung and nordloef. It’s goes by pretty quick, but it has a bunch of nice
+effects:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;http://localhost:4000/assets/2017-05-02-big-pockets-required.gif&quot; alt=&quot;big pockets required&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;As I went down the list of demos on pouet.net, I got to one called
+&lt;a href=&quot;https://www.pouet.net/prod.php?which=53578&quot;&gt;Man Meets Machine - Alternative Party 2009&lt;/a&gt; by jumalauta. I ran
+it and got this:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;http://localhost:4000/assets/2017-05-02-jmla09-hang.gif&quot; alt=&quot;jmla09 hang&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;H A N G S !&lt;/strong&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;initial-investigation&quot;&gt;Initial Investigation&lt;/h1&gt;
+
+&lt;p&gt;OK, so the first thing to determine is where it is hanging. I’ve recently been
+working on a debugger UI using &lt;a href=&quot;https://github.com/ocornut/imgui&quot;&gt;dear imgui&lt;/a&gt;, so I ran the demo in
+the debugger and found where it was hanging:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;http://localhost:4000/assets/2017-05-02-hang-loop.png&quot; alt=&quot;hang loop&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Here’s what it’s doing:&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;Read from &lt;code class=&quot;highlighter-rouge&quot;&gt;0xFF44&lt;/code&gt; into the &lt;code class=&quot;highlighter-rouge&quot;&gt;A&lt;/code&gt; register&lt;/li&gt;
+  &lt;li&gt;Increment &lt;code class=&quot;highlighter-rouge&quot;&gt;A&lt;/code&gt;&lt;/li&gt;
+  &lt;li&gt;Copy &lt;code class=&quot;highlighter-rouge&quot;&gt;A&lt;/code&gt; into the &lt;code class=&quot;highlighter-rouge&quot;&gt;E&lt;/code&gt; register&lt;/li&gt;
+  &lt;li&gt;Read from &lt;code class=&quot;highlighter-rouge&quot;&gt;0xFF44&lt;/code&gt; into the &lt;code class=&quot;highlighter-rouge&quot;&gt;A&lt;/code&gt; register&lt;/li&gt;
+  &lt;li&gt;Compare &lt;code class=&quot;highlighter-rouge&quot;&gt;E&lt;/code&gt; to &lt;code class=&quot;highlighter-rouge&quot;&gt;A&lt;/code&gt;&lt;/li&gt;
+  &lt;li&gt;If they are not equal, jump back to step 4.&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;It seems like this is an infinite loop, right? It keeps reading &lt;code class=&quot;highlighter-rouge&quot;&gt;0xFF44&lt;/code&gt;
+expecting it to change, but never changes it. Well, it turns out that &lt;code class=&quot;highlighter-rouge&quot;&gt;0xFF44&lt;/code&gt;
+is actually the &lt;code class=&quot;highlighter-rouge&quot;&gt;LY&lt;/code&gt; memory-mapped register. It basically is used to tell the
+program what horizontal line is currently being drawn, from 0 to 153. So this
+loop is actually just waiting for the next line to start.&lt;/p&gt;
+
+&lt;h1 id=&quot;153&quot;&gt;153?&lt;/h1&gt;
+
+&lt;p&gt;A bit of an aside about the number 153: the gameboy has a screen resolution
+of 160 by 144 pixels. So why 153? Lines 144 to 153 are for the vertical blank
+(vblank) period. On a CRT screen, the vertical blank is the time that it takes
+the raster gun to go from the bottom-right corner to the top-left corner. The
+gameboy has an LCD screen, so it doesn’t actually have a vblank, but I guess it
+was convenient to pretend that there was one because people expected it.&lt;/p&gt;
+
+&lt;p&gt;So why would it hang waiting for the next line? You’ve probably already
+guessed: if the initial read (step 1 above) reads 153, then it will wait for
+line 154 which never happens.&lt;/p&gt;
+
+&lt;p&gt;Let’s take a look at the registers and see if we’re right:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;http://localhost:4000/assets/2017-05-02-registers.png&quot; alt=&quot;registers&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;The registers are all listed in hexadecimal, so &lt;code class=&quot;highlighter-rouge&quot;&gt;E&lt;/code&gt; is 0x99, which 153. But
+that means that we are waiting for line 153, not line 154. That should be fine,
+right?&lt;/p&gt;
+
+&lt;p&gt;Well, things are a little more complicated than they seem…&lt;/p&gt;
+
+&lt;h1 id=&quot;digging-deeper&quot;&gt;Digging Deeper&lt;/h1&gt;
+
+&lt;p&gt;Each line doesn’t take the same amount of time. Lines 1 through 152 take 456
+cycles. But lines 0 and 153 are special: line 153 only lasts for 4 cycles
+before looping back around to line 0 for &lt;script type=&quot;math/tex&quot;&gt;456 * 2 - 4 = 908&lt;/script&gt; cycles.&lt;/p&gt;
+
+&lt;p&gt;So our loop will only exit if we read from &lt;code class=&quot;highlighter-rouge&quot;&gt;0xFF44&lt;/code&gt; (step 4) at exactly the
+right time, when &lt;code class=&quot;highlighter-rouge&quot;&gt;LY&lt;/code&gt; is 153 for those 4 cycles.&lt;/p&gt;
+
+&lt;h1 id=&quot;cycle-counting&quot;&gt;Cycle Counting&lt;/h1&gt;
+
+&lt;p&gt;How likely is this to happen? Let’s look at the timing of our loop:&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;0x80b2: f0 44     LD A, (FF44H)
+0x80b4: bb        CP E
+0x80b5: 20 fb     JR NZ, -5
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Each instruction on the gameboy CPU takes a multiple of 4 cycles. Each memory
+read (including the read of the opcode) takes 4 cycles. Some instructions, like
+calls, jumps, and 16-bit operations, take more.&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;LD A, (FF44H)
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;The first instruction takes 12 cycles: 8 to read the instruction (the bytes
+&lt;code class=&quot;highlighter-rouge&quot;&gt;0xf0&lt;/code&gt; and &lt;code class=&quot;highlighter-rouge&quot;&gt;0x44&lt;/code&gt;) and 4 more to read from the address &lt;code class=&quot;highlighter-rouge&quot;&gt;0xFF44&lt;/code&gt;.&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;CP E
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;The second instruction takes just 4 cycles.&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;JR NZ, -5
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;The final instruction takes 16 cycles if the branch is taken, 12 if it isn’t.&lt;/p&gt;
+
+&lt;p&gt;Here is the only scenario where we’ll exit the loop. The * marks when we
+actually read the &lt;code class=&quot;highlighter-rouge&quot;&gt;LY&lt;/code&gt; value.&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;Cycle&lt;/th&gt;
+      &lt;th&gt;Instruction&lt;/th&gt;
+      &lt;th&gt;LY&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;N + 0&lt;/td&gt;
+      &lt;td&gt;LD A, (FF44H)&lt;/td&gt;
+      &lt;td&gt;152&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;N + 4&lt;/td&gt;
+      &lt;td&gt;LD A, (FF44H)&lt;/td&gt;
+      &lt;td&gt;152&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;N + 8&lt;/td&gt;
+      &lt;td&gt;LD A, (FF44H) *&lt;/td&gt;
+      &lt;td&gt;153&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;N + 12&lt;/td&gt;
+      &lt;td&gt;CP E&lt;/td&gt;
+      &lt;td&gt;0&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;N + 16&lt;/td&gt;
+      &lt;td&gt;JR NZ, -5&lt;/td&gt;
+      &lt;td&gt;0&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;N + 20&lt;/td&gt;
+      &lt;td&gt;JR NZ, -5&lt;/td&gt;
+      &lt;td&gt;0&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;N + 24&lt;/td&gt;
+      &lt;td&gt;JR NZ, -5&lt;/td&gt;
+      &lt;td&gt;0&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;N + 28&lt;/td&gt;
+      &lt;td&gt;JR NZ, -5&lt;/td&gt;
+      &lt;td&gt;0&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;We want to know if this will occur eventually. To find this out we can use the
+greatest common divisor. Our loop is &lt;script type=&quot;math/tex&quot;&gt;12 + 4 + 16 = 32&lt;/script&gt; cycles, and our
+frame takes &lt;script type=&quot;math/tex&quot;&gt;456 * 154 = 70224&lt;/script&gt; cycles. The greatest common divisor of
+70224 and 32 is 16. This means that LY=153 will only ever occur at two of the
+cycle counts above: &lt;code class=&quot;highlighter-rouge&quot;&gt;N + 0&lt;/code&gt; and &lt;code class=&quot;highlighter-rouge&quot;&gt;N + 16&lt;/code&gt;, or &lt;code class=&quot;highlighter-rouge&quot;&gt;N + 4&lt;/code&gt; and &lt;code class=&quot;highlighter-rouge&quot;&gt;N + 20&lt;/code&gt;, or &lt;code class=&quot;highlighter-rouge&quot;&gt;N + 8&lt;/code&gt;
+and &lt;code class=&quot;highlighter-rouge&quot;&gt;N + 24&lt;/code&gt; or &lt;code class=&quot;highlighter-rouge&quot;&gt;N + 12&lt;/code&gt; and &lt;code class=&quot;highlighter-rouge&quot;&gt;N + 28&lt;/code&gt;.&lt;/p&gt;
+
+&lt;p&gt;As we can see from the table above, we want LY=153 to occur at &lt;code class=&quot;highlighter-rouge&quot;&gt;N + 8&lt;/code&gt;.&lt;/p&gt;
+
+&lt;p&gt;I hope this makes sense, I’m having a hard time explaining it. Anyway, the
+point is that we only have to loop for two frames before we can know if we’ll
+ever read 153. Spoiler: we never do.&lt;/p&gt;
+
+&lt;h1 id=&quot;testing-on-hardware&quot;&gt;Testing on Hardware&lt;/h1&gt;
+
+&lt;p&gt;Who knows, maybe my emulator got it right? We need to test on real hardware to
+know the truth. Fortunately, I bought a cart writer and a couple of writable
+cartridges.&lt;/p&gt;
+
+&lt;video src=&quot;http://localhost:4000/assets/2017-05-02-hardware-test.mp4&quot; controls=&quot;&quot;&gt;&lt;/video&gt;
+
+&lt;p&gt;And the truth is: my emulator got it wrong. :disappointed:&lt;/p&gt;
+
+&lt;h1 id=&quot;digging-deeperer&quot;&gt;Digging Deeperer&lt;/h1&gt;
+
+&lt;p&gt;Now that we know the demo should work on hardware, we need to figure out where
+the emulator is going wrong. Here are the options:&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;Waiting for line 153 is OK, the bug is that we never read it&lt;/li&gt;
+  &lt;li&gt;We shouldn’t be waiting for line 153, something screwed up before this&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;It’s hard to know which is right without more info. The debugger has some
+features to trace interrupts, I/O reads/writes, etc. Turning those and piping
+to a file, we get:&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt; ...
+ &amp;gt;&amp;gt; LCD_STAT interrupt [...H]
+ &amp;gt;&amp;gt; trigger STAT [LY: 142] [cy: 107863268]
+ (0x44 [LY]) = 0x8e
+ (0x44 [LY]) = 0x8e
+ (0x44 [LY]) = 0x8f
+ (0x43 [SCX], 0x1d)
+ (0x42 [SCY], 0x83)
+ &amp;gt;&amp;gt; LCD_STAT interrupt [...H]
+ &amp;gt;&amp;gt; trigger STAT [LY: 143] [cy: 107863724]
+ (0x44 [LY]) = 0x8f
+ (0x44 [LY]) = 0x8f
+ (0x44 [LY]) = 0x90
+ (0x43 [SCX], 0x1c)
+ (0x42 [SCY], 0x83)
+ &amp;gt;&amp;gt; VBLANK interrupt [frame = 1591]
+ (0x46 [DMA], 0xce)
+ &amp;gt;&amp;gt; LCD_STAT interrupt [...H]
+ (0x44 [LY]) = 0x98
+ (0x44 [LY]) = 0x98
+ (0x44 [LY]) = 0x98
+ (0x44 [LY]) = 0x98
+ (0x44 [LY]) = 0x98
+ (0x44 [LY]) = 0x98
+ (0x44 [LY]) = 0x98
+ (0x44 [LY]) = 0x98
+ (0x44 [LY]) = 0x98
+ (0x44 [LY]) = 0x98
+ (0x44 [LY]) = 0x98
+ (0x44 [LY]) = 0x98
+ (0x44 [LY]) = 0x98
+ (0x44 [LY]) = 0x98
+ (0x44 [LY]) = 0x98
+ (0x44 [LY]) = 0x98
+ (0x44 [LY]) = 00
+ (0x44 [LY]) = 00
+ ...
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Before we go further, let me briefly explain interrupts. An interrupt is
+basically just a signal to the CPU to “interrupt” its normal behavior and do
+something different. The gameboy has a few different kinds of interrupts,
+generated by the hardware: VBLANK, STAT, TIMER, SERIAL, and JOYPAD. In our
+demo, we only care about the VBLANK and STAT interrupts.&lt;/p&gt;
+
+&lt;p&gt;The VBLANK interrupt is triggered when a vblank occurs, once every 70224
+cycles, which is approximately 16.74ms.&lt;/p&gt;
+
+&lt;p&gt;The STAT interrupt can be triggered for a few different reasons, but in this
+case, I know that it is for a horizontal blank (hblank) interrupt. Just like
+the vertical blank, CRT monitors also have a horizontal blank period where the
+raster gun would move from the right side of the screen to the left side, one
+line down. The gameboy hblank interrupt is triggered when the current line has
+finished drawing. The hblank period doesn’t last very long. It’s variable, but
+it’s always less than or equal to 204 cycles.&lt;/p&gt;
+
+&lt;p&gt;When an interrupt is triggered, all that really happens is a bit is set in a
+memory-mapped I/O register called &lt;code class=&quot;highlighter-rouge&quot;&gt;IF&lt;/code&gt;. The interrupt isn’t handled until the
+CPU is ready to do so: for example, an interrupt might be triggered in the
+middle of an instruction, but it won’t be handled until the instruction is
+finished.&lt;/p&gt;
+
+&lt;p&gt;The CPU can also disable interrupts via the &lt;code class=&quot;highlighter-rouge&quot;&gt;DI&lt;/code&gt; instruction. In that case,
+the interrupt won’t actually be handled until interrupts are enabled again
+via the &lt;code class=&quot;highlighter-rouge&quot;&gt;EI&lt;/code&gt; instruction.&lt;/p&gt;
+
+&lt;p&gt;When an interrupt is finally handled, the CPU will branch to a specific
+location in memory (address &lt;code class=&quot;highlighter-rouge&quot;&gt;0x40&lt;/code&gt; for VBLANK, &lt;code class=&quot;highlighter-rouge&quot;&gt;0x48&lt;/code&gt; for STAT, etc.) and start
+executing code there.&lt;/p&gt;
+
+&lt;h1 id=&quot;reading-the-log&quot;&gt;Reading the Log&lt;/h1&gt;
+
+&lt;p&gt;So coming back to the log above, we have a few different kinds of messages:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;
+    &lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;trigger STAT [LY: 142] [cy: 107863268]&lt;/code&gt;&lt;/p&gt;
+
+    &lt;p&gt;This message means the graphics hardware has triggered a STAT interrupt at
+line 142. &lt;code class=&quot;highlighter-rouge&quot;&gt;cy&lt;/code&gt; is the current cycle count.&lt;/p&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;LCD_STAT interrupt [...H]&lt;/code&gt;&lt;/p&gt;
+
+    &lt;p&gt;This particular message means we’ve started executing the hblank interrupt
+handler (&lt;code class=&quot;highlighter-rouge&quot;&gt;H&lt;/code&gt; is for hblank).&lt;/p&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;VBLANK interrupt [frame = 1591]&lt;/code&gt;&lt;/p&gt;
+
+    &lt;p&gt;This message means we’ve started executing the vblank interrupt handler, and
+this is the 1591st frame rendered.&lt;/p&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;(0x44 [LY]) = 0x8f&lt;/code&gt;&lt;/p&gt;
+
+    &lt;p&gt;This message means the we read the &lt;code class=&quot;highlighter-rouge&quot;&gt;LY&lt;/code&gt; register and got the value &lt;code class=&quot;highlighter-rouge&quot;&gt;0x8f&lt;/code&gt;.&lt;/p&gt;
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;This output shows exactly when everything goes wrong. Notice at the end that we
+read &lt;code class=&quot;highlighter-rouge&quot;&gt;0x98&lt;/code&gt; (152) from &lt;code class=&quot;highlighter-rouge&quot;&gt;LY&lt;/code&gt;, then wrap around to reading 0. But what happens
+before that? Something strange happens right here:&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt; &amp;gt;&amp;gt; VBLANK interrupt [frame = 1591]
+ (0x46 [DMA], 0xce)
+ &amp;gt;&amp;gt; LCD_STAT interrupt [...H]
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;The hblank interrupt only fires for lines 0 through 143. After that, we’re in
+the vblank period and no hblanks interrupts should occur. So why do we see the
+hblank interrupt handler executing &lt;em&gt;after&lt;/em&gt; the vblank interrupt handler?&lt;/p&gt;
+
+&lt;h1 id=&quot;handling-multiple-interrupts&quot;&gt;Handling Multiple Interrupts&lt;/h1&gt;
+
+&lt;p&gt;Notice that the hblank interrupt is triggered before the vblank interrupt, but
+it isn’t handled until after. We can see something else strange looking at
+where the hblank interrupt is triggered:&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt; &amp;gt;&amp;gt; LCD_STAT interrupt [...H]
+ &amp;gt;&amp;gt; trigger STAT [LY: 143] [cy: 107863724]
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Normally an interrupt is triggered, then is handled. But this is backward –
+the interrupt is being handled before it is triggered!&lt;/p&gt;
+
+&lt;p&gt;When an interrupt is handled, interrupts are disabled automatically, just as if
+you executed the &lt;code class=&quot;highlighter-rouge&quot;&gt;DI&lt;/code&gt; instruction. If any other interrupts are triggered at
+this point, they won’t be handled until the current interrupt handler
+re-enables interrupts.&lt;/p&gt;
+
+&lt;p&gt;So here’s what actually is happening: for some reason, the hblank interrupt is
+being triggered while we’re already handling the previous hblank interrupt.
+This also explains why the last hblank interrupt occurs after the vblank
+interrupt: it’s the hblank interrupt for line 143!&lt;/p&gt;
+
+&lt;h1 id=&quot;where-does-it-go-wrong&quot;&gt;Where Does It Go Wrong?&lt;/h1&gt;
+
+&lt;p&gt;This answers some of our questions, but asks some new ones. Why is the hblank
+interrupt firing while we’re already handling the previous one? If we look back
+in the logs we find this:&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt; &amp;gt;&amp;gt; trigger STAT [LY: 128] [cy: 107856884]
+ &amp;gt;&amp;gt; LCD_STAT interrupt [...H]
+ (0x44 [LY]) = 0x81
+ (0x44 [LY]) = 0x81
+ (0x44 [LY]) = 0x81
+ (0x44 [LY]) = 0x81
+ (0x44 [LY]) = 0x81
+ (0x44 [LY]) = 0x81
+ (0x44 [LY]) = 0x81
+ (0x44 [LY]) = 0x81
+ (0x44 [LY]) = 0x81
+ (0x44 [LY]) = 0x81
+ &amp;gt;&amp;gt; trigger STAT [LY: 129] [cy: 107857340]
+ (0x44 [LY]) = 0x81
+ (0x44 [LY]) = 0x81
+ (0x44 [LY]) = 0x81
+ (0x44 [LY]) = 0x81
+ (0x44 [LY]) = 0x81
+ (0x44 [LY]) = 0x81
+ (0x44 [LY]) = 0x81
+ (0x44 [LY]) = 0x82
+ (0x43 [SCX], 0x1e)
+ (0x42 [SCY], 0x7f)
+ &amp;gt;&amp;gt; LCD_STAT interrupt [...H]
+ &amp;gt;&amp;gt; trigger STAT [LY: 130] [cy: 107857796]
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Aha! This is where we flip from trigger=&amp;gt;handle to handle=&amp;gt;trigger. In
+between, we see that we must be in the same loop reading &lt;code class=&quot;highlighter-rouge&quot;&gt;LY&lt;/code&gt; waiting for 82.
+But this one takes much longer than it normally does. Usually the loop only
+takes 1 or 2 reads before it gets to the next line (aside from when it
+hangs…)&lt;/p&gt;
+
+&lt;p&gt;To figure out why this happens, we need a bit more information. Here’s the real
+log output from the emulator:&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt; 107856424: :&amp;gt;&amp;gt; trigger STAT [LY: 127] [cy: 107856428]
+ 107856428: :&amp;gt;&amp;gt; LCD_STAT interrupt [...H]
+ 107856608: :(0x44 [LY]) = 0x7f
+ 107856628: :(0x44 [LY]) = 0x80
+ ...
+ 107856880: :&amp;gt;&amp;gt; trigger STAT [LY: 128] [cy: 107856884]
+ 107856904: :&amp;gt;&amp;gt; LCD_STAT interrupt [...H]
+ 107857084: :(0x44 [LY]) = 0x81
+ 107857104: :(0x44 [LY]) = 0x81
+ 107857132: :(0x44 [LY]) = 0x81
+ ...
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;The number on the right is the current cycle count. The first hblank interrupt
+in this example is handled very quickly, &lt;script type=&quot;math/tex&quot;&gt;107856428 - 107856424 = 4&lt;/script&gt; cycles
+after the interrupt is triggered.&lt;/p&gt;
+
+&lt;p&gt;The second hblank interrupt is handled &lt;script type=&quot;math/tex&quot;&gt;107856904 - 107856880 = 24&lt;/script&gt; cycles
+after it was triggered. Those extra 20 cycles mean that we miss the end of the
+previous line. Remember that our loop takes 32 cycles, so missing by 20 cycles
+is quite a lot.&lt;/p&gt;
+
+&lt;p&gt;OK, so now we know why the hblank interrupt is firing after the hblank
+interrupt, and we know why the hblank interrupt is triggered after the previous
+hblank interrupt is handled. But why does the interrupt handler take 4 cycles
+some times and 24 cycles others? It all depends on what instruction is being
+executed when the interrupt is triggered. As we learned above, some
+instructions are fast (like &lt;code class=&quot;highlighter-rouge&quot;&gt;CP E&lt;/code&gt; above, 4 cycles) and some instructions are
+slow (like &lt;code class=&quot;highlighter-rouge&quot;&gt;CALL&lt;/code&gt;, 24 cycles). The interrupt is only handled when the
+instruction has finished, so a long running instruction can delay the interrupt
+being handled.&lt;/p&gt;
+
+&lt;p&gt;While writing this, I had an interesting thought: what if I make the interrupt
+handler check for interrupts earlier than that? That is, what if we do
+something like this:&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;Read initial byte of opcode&lt;/li&gt;
+  &lt;li&gt;If there are pending interrupts:
+    &lt;ol&gt;
+      &lt;li&gt;Stop executing that instruction&lt;/li&gt;
+      &lt;li&gt;Jump to the interrupt handler and start executing the new instruction&lt;/li&gt;
+    &lt;/ol&gt;
+  &lt;/li&gt;
+  &lt;li&gt;Else:
+    &lt;ol&gt;
+      &lt;li&gt;Execute the rest of the instruction&lt;/li&gt;
+    &lt;/ol&gt;
+  &lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;This is basically the same as triggering all interrupts 4 cycles earlier.
+Interestingly, when I run this:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;http://localhost:4000/assets/2017-05-02-jmla09-works.gif&quot; alt=&quot;jmla09 works&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;W O R K S !&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;But it is the right fix? Well… that’s the tricky part. It fixes this hang,
+and some other tests, but breaks some other tests. It also doesn’t match the
+specified interrupt behavior of a Z80 CPU (the gameboy CPU is not a Z80, but is
+pretty close).&lt;/p&gt;
+
+&lt;h1 id=&quot;epilogue&quot;&gt;Epilogue&lt;/h1&gt;
+
+&lt;p&gt;I started writing this blog post last week, expecting to start and finish it in
+a couple of days. Since I discovered this fix, I’ve been trying to figure out
+how to keep it working, and all the other tests, so I could have a really
+awesome finish to this blog post! But no such luck. I guess this is a more
+accurate ending, instead – things are a little better here, a little worse
+there; the never-ending struggle of accuracy-driven emulator development.&lt;/p&gt;</content><author><name>ben smith</name></author><summary type="html"></summary></entry><entry><title type="html">binjgb and webgl</title><link href="http://localhost:4000/2017/03/24/binjgb-and-webgl.html" rel="alternate" type="text/html" title="binjgb and webgl" /><published>2017-03-24T09:09:00-07:00</published><updated>2017-03-24T09:09:00-07:00</updated><id>http://localhost:4000/2017/03/24/binjgb-and-webgl</id><content type="html" xml:base="http://localhost:4000/2017/03/24/binjgb-and-webgl.html">&lt;p&gt;This is part 3 of a series on &lt;a href=&quot;https://github.com/binji/binjgb&quot;&gt;binjgb&lt;/a&gt;, see &lt;a href=&quot;/2017/02/26/binjgb-on-the-web-part-1.html&quot;&gt;part 1&lt;/a&gt;!&lt;/p&gt;
+
+&lt;h1 id=&quot;binjgb-and-simplicity&quot;&gt;Binjgb and simplicity&lt;/h1&gt;
+
+&lt;p&gt;I’ve wanted to work on an emulator for a long time, probably since I first saw
+nesticle in high school. Last year I was looking for a new project to spend
+some time on, and started on binjgb, a gameboy emulator.&lt;/p&gt;
+
+&lt;p&gt;For the longest time, it was written as a single C file. My goal was to keep it
+as simple as possible, which meant I tried to avoid any superfluous code
+structure. This is especially prevalent in C, since it doesn’t really provide
+you with many tools for compressing code and handling abstractions.&lt;/p&gt;
+
+&lt;p&gt;What do I mean by “superfluous code structure”? After I had binjgb in a mostly
+working state, I started looking at other gameboy emulators. It turns out that
+a lot of people use it as an “intro to emulator development”, just like I did!&lt;/p&gt;
+
+&lt;p&gt;But a lot of the code I saw would do stuff like this:&lt;/p&gt;
+
+&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-c--&quot; data-lang=&quot;c++&quot;&gt;&lt;span class=&quot;k&quot;&gt;class&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;Instruction&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt; &lt;span class=&quot;k&quot;&gt;public&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;  &lt;span class=&quot;k&quot;&gt;virtual&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;~&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Instruction&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{}&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;  &lt;span class=&quot;k&quot;&gt;virtual&lt;/span&gt; &lt;span class=&quot;kt&quot;&gt;void&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Execute&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Emulator&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;span class=&quot;p&quot;&gt;};&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;span class=&quot;k&quot;&gt;class&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;LoadInstruction&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;public&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Instruction&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt; &lt;span class=&quot;k&quot;&gt;public&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;  &lt;span class=&quot;n&quot;&gt;LoadInstruction&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Register&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;src&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Register&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;dst&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;src&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;src&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;),&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;dst&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;dst&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{}&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;  &lt;span class=&quot;k&quot;&gt;virtual&lt;/span&gt; &lt;span class=&quot;kt&quot;&gt;void&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Execute&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Emulator&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;emulator&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;    &lt;span class=&quot;n&quot;&gt;emulator&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;reg&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;dst&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;emulator&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;reg&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;src&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;  &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;  &lt;span class=&quot;k&quot;&gt;virtual&lt;/span&gt; &lt;span class=&quot;kt&quot;&gt;void&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Print&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Output&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;out&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;    &lt;span class=&quot;n&quot;&gt;out&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;ld &quot;&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;dst&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;, &quot;&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;src&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;();&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;  &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;  &lt;span class=&quot;n&quot;&gt;Register&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;src&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;  &lt;span class=&quot;n&quot;&gt;Register&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;dst&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;span class=&quot;p&quot;&gt;};&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;span class=&quot;n&quot;&gt;LoadInstruction&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Op40&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Register&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;B&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(),&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Register&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;B&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;());&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;span class=&quot;n&quot;&gt;LoadInstruction&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Op41&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Register&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;B&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(),&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Register&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;C&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;());&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;span class=&quot;n&quot;&gt;LoadInstruction&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Op42&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Register&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;B&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(),&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Register&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;D&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;());&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;span class=&quot;p&quot;&gt;...&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+
+&lt;p&gt;Where I tried to keep code like this as minimal as possible:&lt;/p&gt;
+
+&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-c&quot; data-lang=&quot;c&quot;&gt;&lt;span class=&quot;cp&quot;&gt;#define REG(R) e-&amp;gt;state.reg.R&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;span class=&quot;cp&quot;&gt;#define LD_R_R(RD, RS) REG(RD) = REG(RS)&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;  &lt;span class=&quot;k&quot;&gt;static&lt;/span&gt; &lt;span class=&quot;kt&quot;&gt;void&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;execute_instruction&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Emulator&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;e&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;    &lt;span class=&quot;p&quot;&gt;...&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;    &lt;span class=&quot;c1&quot;&gt;// Instruction dispatch.&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;/span&gt;    &lt;span class=&quot;k&quot;&gt;switch&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;opcode&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;      &lt;span class=&quot;p&quot;&gt;...&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;      &lt;span class=&quot;k&quot;&gt;case&lt;/span&gt; &lt;span class=&quot;mh&quot;&gt;0x40&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;LD_R_R&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;B&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;B&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;      &lt;span class=&quot;k&quot;&gt;case&lt;/span&gt; &lt;span class=&quot;mh&quot;&gt;0x41&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;LD_R_R&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;B&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;C&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;      &lt;span class=&quot;k&quot;&gt;case&lt;/span&gt; &lt;span class=&quot;mh&quot;&gt;0x42&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;LD_R_R&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;B&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;D&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;      &lt;span class=&quot;p&quot;&gt;...&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+
+&lt;p&gt;As you can see, readability suffers. But in my opinion, dense straightforward C
+code is easier to read than sparse sprawling C++ code.&lt;/p&gt;
+
+&lt;p&gt;There are many other examples I could show here, but I think I may leave that
+for another blog post.&lt;/p&gt;
+
+&lt;h1 id=&quot;canvas2d&quot;&gt;Canvas2D&lt;/h1&gt;
+
+&lt;p&gt;When I wrote the initial renderer for binjgb on the web, I used canvas2D. It’s
+simple and pretty easy to use. First, you need to create a canvas element:&lt;/p&gt;
+
+&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-javascript&quot; data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;$&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;document&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;querySelector&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;bind&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;document&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;canvasEl&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;$&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'canvas'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+
+&lt;p&gt;Then get the 2D rendering context:&lt;/p&gt;
+
+&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-javascript&quot; data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;k&quot;&gt;this&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;ctx&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;el&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;getContext&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'2d'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;</content><author><name>ben smith</name></author><summary type="html">This is part 3 of a series on binjgb, see part 1!</summary></entry><entry><title type="html">WebAssembly type-checking</title><link href="http://localhost:4000/2017/03/04/webassembly-type-checking.html" rel="alternate" type="text/html" title="WebAssembly type-checking" /><published>2017-03-04T18:42:00-08:00</published><updated>2017-03-04T18:42:00-08:00</updated><id>http://localhost:4000/2017/03/04/webassembly-type-checking</id><content type="html" xml:base="http://localhost:4000/2017/03/04/webassembly-type-checking.html">&lt;h1 id=&quot;a-stack-machine&quot;&gt;A Stack Machine&lt;/h1&gt;
+
+&lt;p&gt;Now that WebAssembly is &lt;a href=&quot;https://lists.w3.org/Archives/Public/public-webassembly/2017Feb/0002.html&quot;&gt;version 1&lt;/a&gt; (the first and final
+official version!) more people are starting to take a look at it. One common
+point of confusion is how module validation works; in particular, how
+type-checking works. There are a number of things that need to be validated in
+a WebAssembly module, but we’ll just focus on type-checking for this blog post.&lt;/p&gt;
+
+&lt;p&gt;The WebAssembly format is specified in terms of a typed stack machine, and any
+execution engine needs to validate the binary before it can execute it. So what
+is a stack machine? In essence, it operates on expressions by pushing and
+popping them from a virtual stack. Here’s an example of how &lt;code class=&quot;highlighter-rouge&quot;&gt;3 + 4&lt;/code&gt; could be
+converted to WebAssembly:&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;i32.const 3
+i32.const 4
+i32.add
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Each of these instructions modifies the stack, &lt;code class=&quot;highlighter-rouge&quot;&gt;i32.const&lt;/code&gt; pushes a value on
+the stack, and &lt;code class=&quot;highlighter-rouge&quot;&gt;i32.add&lt;/code&gt; pops two values off of the stack, adds them, and
+pushes the sum back on the stack. Each value on the stack has an associated
+type, &lt;code class=&quot;highlighter-rouge&quot;&gt;i32&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;i64&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;f32&lt;/code&gt;, or &lt;code class=&quot;highlighter-rouge&quot;&gt;f64&lt;/code&gt;. These represent 32-bit integers, 64-bit
+integers, 32-bit floats and 64-bit floats respectively.&lt;/p&gt;
+
+&lt;p&gt;In the following example, the diagram to the right of the instructions shows
+the stack after the instruction has executed:&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;instructions&lt;/th&gt;
+      &lt;th&gt;value stack&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;i32.const 3&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;span class=&quot;cell&quot;&gt;i32:3&lt;/span&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;i32.const 4&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;span class=&quot;cell&quot;&gt;i32:3&lt;/span&gt;&lt;span class=&quot;cell&quot;&gt;i32:4&lt;/span&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;i32.add&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;span class=&quot;cell&quot;&gt;i32:7&lt;/span&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;h1 id=&quot;typing-the-stack-machine&quot;&gt;Typing the Stack Machine&lt;/h1&gt;
+
+&lt;p&gt;In the above example, the types all match, so everything is valid. &lt;code class=&quot;highlighter-rouge&quot;&gt;i32.add&lt;/code&gt;
+expects two &lt;code class=&quot;highlighter-rouge&quot;&gt;i32&lt;/code&gt; values to be on the top of the stack, so if they aren’t
+there, the module is invalid:&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;stack before&lt;/th&gt;
+      &lt;th&gt;result after &lt;code class=&quot;highlighter-rouge&quot;&gt;i32.add&lt;/code&gt;&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;em&gt;empty&lt;/em&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;strong&gt;invalid&lt;/strong&gt;, nothing on the stack&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;span class=&quot;cell&quot;&gt;i32:0&lt;/span&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;strong&gt;invalid&lt;/strong&gt;, only one i32 on the stack&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;span class=&quot;cell&quot;&gt;i32:4&lt;/span&gt;&lt;span class=&quot;cell&quot;&gt;f32:3.5&lt;/span&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;strong&gt;invalid&lt;/strong&gt;, f32 on top of the stack&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;The examples so far have used a value stack, and that’s how a WebAssembly
+interpreter would likely work. But in most cases we don’t actually know the
+values on the stack when the module is being validated. For example:&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;instructions
+get_local 0
+get_local 1
+i32.add
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Here, &lt;code class=&quot;highlighter-rouge&quot;&gt;get_local&lt;/code&gt; is an instruction that gets a local variable’s value and
+pushes it on the stack. It can also be used to get the value of a function
+parameter. In either case, we don’t know what the value is that will be pushed
+on the stack. We do know what its type must be, though. So for validation, we
+actually use a type stack, not a value stack.&lt;/p&gt;
+
+&lt;p&gt;Let’s look at a simple example of a full function:&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;(func $add_one (param i32) (result i32)
+  get_local 0
+  i32.const 1
+  i32.add)
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;We can calculate the type stack after each instruction like this:&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;instructions&lt;/th&gt;
+      &lt;th&gt;type stack&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;get_local 0&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;span class=&quot;cell&quot;&gt;i32&lt;/span&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;i32.const 1&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;span class=&quot;cell&quot;&gt;i32&lt;/span&gt;&lt;span class=&quot;cell&quot;&gt;i32&lt;/span&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;i32.add&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;span class=&quot;cell&quot;&gt;i32&lt;/span&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;Notice that the stack has exactly one &lt;code class=&quot;highlighter-rouge&quot;&gt;i32&lt;/code&gt; value at the end of the function.
+This will become the return value of the function. This function is valid, and
+if you were to run it, it would increment its argument by one.&lt;/p&gt;
+
+&lt;h1 id=&quot;more-instructions&quot;&gt;More instructions&lt;/h1&gt;
+
+&lt;p&gt;Most WebAssembly instructions manipulate the stack in simple ways, like
+&lt;code class=&quot;highlighter-rouge&quot;&gt;i32.add&lt;/code&gt;. They pop a few operands of a given type off the stack, and push a
+result. Here are some examples:&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;instruction&lt;/th&gt;
+      &lt;th&gt;stack signature&lt;/th&gt;
+      &lt;th&gt;description&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;f32.const&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;→&lt;span class=&quot;cell&quot;&gt;f32&lt;/span&gt;&lt;/td&gt;
+      &lt;td&gt;push a constant f32 value&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;i64.mul&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;span class=&quot;cell&quot;&gt;i64&lt;/span&gt;&lt;span class=&quot;cell&quot;&gt;i64&lt;/span&gt;→&lt;span class=&quot;cell&quot;&gt;i64&lt;/span&gt;&lt;/td&gt;
+      &lt;td&gt;multiply two i64 values&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;i32.popcnt&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;span class=&quot;cell&quot;&gt;i32&lt;/span&gt;→&lt;span class=&quot;cell&quot;&gt;i32&lt;/span&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;a href=&quot;https://en.wikipedia.org/wiki/Hamming_weight&quot;&gt;population count&lt;/a&gt; (number of 1 bits)&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;f32.sqrt&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;span class=&quot;cell&quot;&gt;f32&lt;/span&gt;→&lt;span class=&quot;cell&quot;&gt;f32&lt;/span&gt;&lt;/td&gt;
+      &lt;td&gt;square root&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;i64.eqz&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;span class=&quot;cell&quot;&gt;i64&lt;/span&gt;→&lt;span class=&quot;cell&quot;&gt;i32&lt;/span&gt;&lt;/td&gt;
+      &lt;td&gt;compare equal to zero (return 1 if operand is zero, 0 otherwise)&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;f64.lt&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;span class=&quot;cell&quot;&gt;f64&lt;/span&gt;&lt;span class=&quot;cell&quot;&gt;f64&lt;/span&gt;→&lt;span class=&quot;cell&quot;&gt;i32&lt;/span&gt;&lt;/td&gt;
+      &lt;td&gt;compare ordered and less than&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;i32.trunc_s/f32&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;span class=&quot;cell&quot;&gt;f32&lt;/span&gt;→&lt;span class=&quot;cell&quot;&gt;i32&lt;/span&gt;&lt;/td&gt;
+      &lt;td&gt;truncate a 32-bit float to a signed 32-bit integer&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;You can find the full list of instructions &lt;a href=&quot;https://github.com/WebAssembly/design/blob/master/BinaryEncoding.md#control-flow-operators-described-here&quot;&gt;here&lt;/a&gt;.&lt;/p&gt;
+
+&lt;h1 id=&quot;block-and-br&quot;&gt;Block and Br&lt;/h1&gt;
+
+&lt;p&gt;WebAssembly, unlike most other similar formats, only has structured control
+flow. This means that there is no “goto” instruction. Instead, all control flow
+looks more like a normal imperative language, just without any of the fancy
+stuff.&lt;/p&gt;
+
+&lt;p&gt;A &lt;code class=&quot;highlighter-rouge&quot;&gt;block&lt;/code&gt; is basically just a label wrapping a sequence of instructions. If you
+branch to the label, control flow transfers to the end of the block. All
+forward branches use a &lt;code class=&quot;highlighter-rouge&quot;&gt;block&lt;/code&gt; and &lt;code class=&quot;highlighter-rouge&quot;&gt;br&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;br_if&lt;/code&gt; or &lt;code class=&quot;highlighter-rouge&quot;&gt;br_table&lt;/code&gt; instruction.&lt;/p&gt;
+
+&lt;p&gt;Here’s an example demonstrating &lt;code class=&quot;highlighter-rouge&quot;&gt;br&lt;/code&gt;, which does an unconditional branch.&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;block $exit
+  ...
+  br $exit   ;; branch to the &quot;end&quot; below
+  nop        ;; this is never executed!
+end
+;; br above branches here
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;And here’s an example demonstrating &lt;code class=&quot;highlighter-rouge&quot;&gt;br_if&lt;/code&gt;, which pops an &lt;code class=&quot;highlighter-rouge&quot;&gt;i32&lt;/code&gt; off the stack
+and branches if the value is non-zero:&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;block $exit
+  get_local $my_i32
+  br_if $exit
+  ;; This is executed if $my_i32 is zero,
+  ;; then control falls through to below
+  nop
+end
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;This is equivalent to something like:&lt;/p&gt;
+
+&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-javascript&quot; data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;$my_i32&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;  &lt;span class=&quot;nx&quot;&gt;nop&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+
+&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;br_table&lt;/code&gt; is similar, but can have multiple branch locations. It works kind of
+like C’s or JavaScript’s &lt;code class=&quot;highlighter-rouge&quot;&gt;switch&lt;/code&gt; statement. See the &lt;a href=&quot;https://github.com/WebAssembly/design/blob/master/Semantics.md#control-constructs-and-instructions&quot;&gt;WebAssembly semantics
+doc&lt;/a&gt; for more info about it.&lt;/p&gt;
+
+&lt;h1 id=&quot;if&quot;&gt;If&lt;/h1&gt;
+
+&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;if&lt;/code&gt; is a convenient shorthand for behavior that can be accomplished with
+&lt;code class=&quot;highlighter-rouge&quot;&gt;block&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;br&lt;/code&gt; and &lt;code class=&quot;highlighter-rouge&quot;&gt;br_if&lt;/code&gt;. It works as you would expect:&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;get_local $my_i32
+if
+  ...  ;; Executed if $my_i32 is non-zero
+else
+  ...  ;; Executed if $my_i32 is zero
+end
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;This is equivalent to:&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;block $exit
+  block $true
+    get_local $my_i32
+    br_if $true
+    ... ;; Executed if $my_i32 is zero
+    br $exit
+  end
+  ... ;; Executed if $my_i32 is non-zero
+end
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;It’s also legal to have an if without an else:&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;get_local $my_i32
+if
+  ...  ;; Executed if $my_i32 is non-zero
+end
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;This is equivalent to:&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;block $exit
+  get_local $my_i32
+  i32.eqz   ;; Compare equal to zero; this is like &quot;not&quot;
+  br_if $exit
+  ...  ;; Executed if $my_i32 is non-zero
+end
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Note that an &lt;code class=&quot;highlighter-rouge&quot;&gt;if&lt;/code&gt; is also a label. Branching to it transfers control flow to
+the end of the &lt;code class=&quot;highlighter-rouge&quot;&gt;if&lt;/code&gt; block:&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;get_local $my_i32
+if $exit
+  br $exit  ;; Branch to the end of the if.
+end
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;h1 id=&quot;loop&quot;&gt;Loop&lt;/h1&gt;
+
+&lt;p&gt;All backward branches must use a loop instruction. Unlike most languages,
+control flow does not automatically branch to the top of the loop, it must be
+done explicitly. This means that you can fall off the bottom of a loop, just
+like a block:&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;loop
+  nop
+  ;; Control flows from here...
+end
+;; ... to here.
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Here’s a simple loop:&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;loop $continue
+  ...
+  get_local $not_done
+  br_if $continue
+end
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;This is equivalent to something like:&lt;/p&gt;
+
+&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-javascript&quot; data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;k&quot;&gt;do&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;  &lt;span class=&quot;p&quot;&gt;...&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;while&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;$not_done&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;!=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+
+&lt;h1 id=&quot;stack-diving&quot;&gt;Stack diving&lt;/h1&gt;
+
+&lt;p&gt;Another important point about &lt;code class=&quot;highlighter-rouge&quot;&gt;block&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;loop&lt;/code&gt; and &lt;code class=&quot;highlighter-rouge&quot;&gt;if&lt;/code&gt;: between the beginning
+and &lt;code class=&quot;highlighter-rouge&quot;&gt;end&lt;/code&gt; of any of these constructs, the stack can never be smaller than the
+size at the start. This means that you don’t need to know what’s “below” the
+&lt;code class=&quot;highlighter-rouge&quot;&gt;block&lt;/code&gt; on the stack to type-check it.&lt;/p&gt;
+
+&lt;p&gt;Here’s an invalid example:&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;i32.const 1
+i32.const 2
+block
+  i32.add  ;; Invalid, can't pop past the start of the block
+end
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Even though the stack contains two &lt;code class=&quot;highlighter-rouge&quot;&gt;i32&lt;/code&gt; values, &lt;code class=&quot;highlighter-rouge&quot;&gt;i32.add&lt;/code&gt; can’t pop through
+the &lt;code class=&quot;highlighter-rouge&quot;&gt;block&lt;/code&gt; to access them.&lt;/p&gt;
+
+&lt;h1 id=&quot;expression-based-control-flow&quot;&gt;Expression-based Control Flow&lt;/h1&gt;
+
+&lt;p&gt;WebAssembly has expression-based control flow instructions, which means that a
+value can “flow” through with the control. If you know JavaScript or C, think
+of it as the difference between an if statement and the ?: operator. In those
+languages, an if statement does not return a value:&lt;/p&gt;
+
+&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-javascript&quot; data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;something&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;  &lt;span class=&quot;nx&quot;&gt;do_this&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;();&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;else&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;  &lt;span class=&quot;nx&quot;&gt;do_that&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;();&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+
+&lt;p&gt;Whereas the ?: operator does return a value:&lt;/p&gt;
+
+&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-javascript&quot; data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;value&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;which_one&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;?&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;this_one&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;that_one&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;();&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+
+&lt;p&gt;In WebAssembly, you signify this with a type signature on the &lt;code class=&quot;highlighter-rouge&quot;&gt;block&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;loop&lt;/code&gt;
+or &lt;code class=&quot;highlighter-rouge&quot;&gt;if&lt;/code&gt; instruction:&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;get_local $my_i32
+if i32
+  i32.const 2
+else
+  i32.const 3
+end
+;; The stack contains either i32:2 or i32:3 at this point.
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;block i64
+  i64.const 1
+end
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;loop f32
+  f32.const 1
+end
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Branches to a label must match the type signature of the label:&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;block $exit i32
+  i32.const 5
+  br $exit
+end
+;; The stack contains i32:5 here.
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;The following example is invalid, since there is a type mismatch between the
+&lt;code class=&quot;highlighter-rouge&quot;&gt;br&lt;/code&gt; value and the block’s type signature:&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;block $exit f32
+  i32.const 5
+  br $exit  ;; Invalid, top of stack must be f32.
+end
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;loop&lt;/code&gt; is different, in that the type signature signifies the fallthrough type,
+not the branch type:&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;loop $continue i32
+  ...
+  get_local $my_i32
+  br_if $continue  ;; Does not transfer a value with control flow.
+  i32.const 1
+end
+;; Stack contains i32:1 here.
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;h1 id=&quot;type-checking-control-flow&quot;&gt;Type-checking Control Flow&lt;/h1&gt;
+
+&lt;p&gt;The primary rule of type-checking control flow is that the contents of the
+stack must be consistent for all paths through the code. The &lt;code class=&quot;highlighter-rouge&quot;&gt;br&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;br_if&lt;/code&gt; and
+&lt;code class=&quot;highlighter-rouge&quot;&gt;br_table&lt;/code&gt; instructions help here, since they will automatically unwind the
+stack to the height it was when the &lt;code class=&quot;highlighter-rouge&quot;&gt;block&lt;/code&gt; or &lt;code class=&quot;highlighter-rouge&quot;&gt;if&lt;/code&gt; was entered:&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;instructions&lt;/th&gt;
+      &lt;th&gt;type stack&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;…&lt;/td&gt;
+      &lt;td&gt;&lt;span class=&quot;cell&quot;&gt;…&lt;/span&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;f32.const 1&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;span class=&quot;cell&quot;&gt;…&lt;/span&gt;&lt;span class=&quot;cell&quot;&gt;f32&lt;/span&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;block $exit&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;span class=&quot;cell&quot;&gt;…&lt;/span&gt;&lt;span class=&quot;cell&quot;&gt;f32&lt;/span&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;i64.const 2&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;span class=&quot;cell&quot;&gt;…&lt;/span&gt;&lt;span class=&quot;cell&quot;&gt;f32&lt;/span&gt;&lt;span class=&quot;cell&quot;&gt;i64&lt;/span&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;i32.const 3&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;span class=&quot;cell&quot;&gt;…&lt;/span&gt;&lt;span class=&quot;cell&quot;&gt;f32&lt;/span&gt;&lt;span class=&quot;cell&quot;&gt;i64&lt;/span&gt;&lt;span class=&quot;cell&quot;&gt;i32&lt;/span&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;br $exit&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;span class=&quot;cell&quot;&gt;*&lt;/span&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;end&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;span class=&quot;cell&quot;&gt;…&lt;/span&gt;&lt;span class=&quot;cell&quot;&gt;f32&lt;/span&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;The state of the stack between the &lt;code class=&quot;highlighter-rouge&quot;&gt;br&lt;/code&gt; and the &lt;code class=&quot;highlighter-rouge&quot;&gt;end&lt;/code&gt; is special, I’ll talk
+about that below.&lt;/p&gt;
+
+&lt;p&gt;Control can flow out of a &lt;code class=&quot;highlighter-rouge&quot;&gt;block&lt;/code&gt; two ways: via a &lt;code class=&quot;highlighter-rouge&quot;&gt;br&lt;/code&gt; and falling through the
+bottom. The primary rule says that the stack must be consistent in both paths.
+If we modify the example above to use &lt;code class=&quot;highlighter-rouge&quot;&gt;br_if&lt;/code&gt; instead of &lt;code class=&quot;highlighter-rouge&quot;&gt;br&lt;/code&gt;, we have to
+manually “clean up” the stack before falling through the bottom for it to be
+valid:&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;instructions&lt;/th&gt;
+      &lt;th&gt;type stack&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;…&lt;/td&gt;
+      &lt;td&gt;&lt;span class=&quot;cell&quot;&gt;…&lt;/span&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;f32.const 1&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;span class=&quot;cell&quot;&gt;…&lt;/span&gt;&lt;span class=&quot;cell&quot;&gt;f32&lt;/span&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;block $exit&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;span class=&quot;cell&quot;&gt;…&lt;/span&gt;&lt;span class=&quot;cell&quot;&gt;f32&lt;/span&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;i64.const 2&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;span class=&quot;cell&quot;&gt;…&lt;/span&gt;&lt;span class=&quot;cell&quot;&gt;f32&lt;/span&gt;&lt;span class=&quot;cell&quot;&gt;i64&lt;/span&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;i32.const 3&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;span class=&quot;cell&quot;&gt;…&lt;/span&gt;&lt;span class=&quot;cell&quot;&gt;f32&lt;/span&gt;&lt;span class=&quot;cell&quot;&gt;i64&lt;/span&gt;&lt;span class=&quot;cell&quot;&gt;i32&lt;/span&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;br_if $exit&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;span class=&quot;cell&quot;&gt;…&lt;/span&gt;&lt;span class=&quot;cell&quot;&gt;f32&lt;/span&gt;&lt;span class=&quot;cell&quot;&gt;i64&lt;/span&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;drop&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;span class=&quot;cell&quot;&gt;…&lt;/span&gt;&lt;span class=&quot;cell&quot;&gt;f32&lt;/span&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;end&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;span class=&quot;cell&quot;&gt;…&lt;/span&gt;&lt;span class=&quot;cell&quot;&gt;f32&lt;/span&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;drop&lt;/code&gt; is an instruction which drops the top value from the stack. It’s useful
+in this case, but note that we could have also used a &lt;code class=&quot;highlighter-rouge&quot;&gt;br&lt;/code&gt; after the &lt;code class=&quot;highlighter-rouge&quot;&gt;br_if&lt;/code&gt; to
+clean up the stack for us automatically.&lt;/p&gt;
+
+&lt;p&gt;Control can flow out of an &lt;code class=&quot;highlighter-rouge&quot;&gt;if&lt;/code&gt; block three ways: via a &lt;code class=&quot;highlighter-rouge&quot;&gt;br&lt;/code&gt;, and by falling
+through the bottom of the true (non-zero) and false (zero) arms of the &lt;code class=&quot;highlighter-rouge&quot;&gt;if&lt;/code&gt;.
+Again, each of these paths must have a consistent stack.&lt;/p&gt;
+
+&lt;p&gt;Here’s an invalid example:&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;instructions&lt;/th&gt;
+      &lt;th&gt;type stack&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;…&lt;/td&gt;
+      &lt;td&gt;&lt;span class=&quot;cell&quot;&gt;…&lt;/span&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;get_local $my_i32&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;span class=&quot;cell&quot;&gt;…&lt;/span&gt;&lt;span class=&quot;cell&quot;&gt;i32&lt;/span&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;if i32&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;span class=&quot;cell&quot;&gt;…&lt;/span&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;i32.const 2&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;span class=&quot;cell&quot;&gt;…&lt;/span&gt;&lt;span class=&quot;cell&quot;&gt;i32&lt;/span&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;else&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;span class=&quot;cell&quot;&gt;…&lt;/span&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;f32.const 3&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;span class=&quot;cell&quot;&gt;…&lt;/span&gt;&lt;span class=&quot;cell&quot;&gt;f32&lt;/span&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;end&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;span class=&quot;cell&quot;&gt;…&lt;/span&gt;&lt;span class=&quot;cell&quot;&gt;???&lt;/span&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;It’s not clear at the end of the &lt;code class=&quot;highlighter-rouge&quot;&gt;if&lt;/code&gt; what the state of the stack is: if
+&lt;code class=&quot;highlighter-rouge&quot;&gt;$my_i32&lt;/code&gt; is non-zero, then the stack top is &lt;code class=&quot;highlighter-rouge&quot;&gt;i32&lt;/code&gt;, if &lt;code class=&quot;highlighter-rouge&quot;&gt;$my_i32&lt;/code&gt; is zero, then
+the stack top is &lt;code class=&quot;highlighter-rouge&quot;&gt;f32&lt;/code&gt;. The type-signature of the &lt;code class=&quot;highlighter-rouge&quot;&gt;if&lt;/code&gt; tells us which is
+correct. It explicitly says that, at &lt;code class=&quot;highlighter-rouge&quot;&gt;end&lt;/code&gt;, the stack must contain whatever was
+there before (&lt;span class=&quot;cell&quot;&gt;…&lt;/span&gt;), plus an &lt;code class=&quot;highlighter-rouge&quot;&gt;i32&lt;/code&gt; on top. Since the
+false branch has an &lt;code class=&quot;highlighter-rouge&quot;&gt;f32&lt;/code&gt; on top, this example is invalid.&lt;/p&gt;
+
+&lt;p&gt;You can always look at the signature of a &lt;code class=&quot;highlighter-rouge&quot;&gt;block&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;loop&lt;/code&gt; or &lt;code class=&quot;highlighter-rouge&quot;&gt;if&lt;/code&gt; and determine
+how it will manipulate the stack, without looking at any of its contents. Some
+examples:&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;instruction&lt;/th&gt;
+      &lt;th&gt;stack signature&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;block i32 ... end&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;→&lt;span class=&quot;cell&quot;&gt;i32&lt;/span&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;if f32 ... end&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;→&lt;span class=&quot;cell&quot;&gt;f32&lt;/span&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;loop i64 ... end&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;→&lt;span class=&quot;cell&quot;&gt;i64&lt;/span&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;block ... end&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;→&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;h1 id=&quot;unreachable-code&quot;&gt;Unreachable code&lt;/h1&gt;
+
+&lt;p&gt;Remember above when I said the state of the stack between a &lt;code class=&quot;highlighter-rouge&quot;&gt;br&lt;/code&gt; and &lt;code class=&quot;highlighter-rouge&quot;&gt;end&lt;/code&gt; is
+special? That’s because it is unreachable code. Since it’s not possible to
+actually execute the code at this point, we don’t know what’s on the stack.&lt;/p&gt;
+
+&lt;p&gt;So, for example:&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;block $exit
+  br $exit
+
+  ;; We know that this code is unreachable.
+  ;; What is on the stack here?
+  i32.const 1
+  i32.const 2
+  i32.add
+  ...
+end
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;In a way, it doesn’t really matter, right? Since you can never execute this
+code, it doesn’t matter what is on the stack. There was a
+&lt;a href=&quot;https://github.com/WebAssembly/design/pull/894&quot;&gt;lot of discussion&lt;/a&gt; about what to do in this case, but finally we
+decided to do what we called “full type-checking”. This means that unreachable
+code is type-checked, but in a somewhat special way.&lt;/p&gt;
+
+&lt;p&gt;Because the stack could have anything on it, we say that it is
+“polymorphic”. When we type-check unreachable code, we’re trying to determine
+whether an initial type stack exists that would type-check if we were to start
+executing the unreachable code. Every instruction gives us clues as to what this
+stack must be. If we ever rule out all possible stacks, we’ve determined that
+the code is invalid.&lt;/p&gt;
+
+&lt;p&gt;This sounds complicated, but there’s a trick to make it easy to do. In a way,
+the type-checking works exactly the same as it always had. The only difference
+is what happens when you pop from the polymorphic stack: you always get exactly
+what you wanted:&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;block $exit
+  br $exit  ;; stack is polymorphic
+  i32.add   ;; pop twice from the polymorphic stack
+            ;; we wanted two i32s, and we got them!
+end
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;This seems weird, right? How does the polymorphic stack “know” we want &lt;code class=&quot;highlighter-rouge&quot;&gt;i32&lt;/code&gt;s?
+I find that it’s easist to think of it as proving what must be on the stack for
+the code to type-check. Let’s extract the unreachable code:&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;i32.add
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;We know that &lt;code class=&quot;highlighter-rouge&quot;&gt;i32.add&lt;/code&gt; pops two &lt;code class=&quot;highlighter-rouge&quot;&gt;i32&lt;/code&gt;s and pushes their sum as an &lt;code class=&quot;highlighter-rouge&quot;&gt;i32&lt;/code&gt;. So for
+this code to be valid, the stack must be: &lt;span class=&quot;cell&quot;&gt;i32&lt;/span&gt;&lt;span class=&quot;cell&quot;&gt;i32&lt;/span&gt;. Any other
+stack wouldn’t be valid.&lt;/p&gt;
+
+&lt;p&gt;Let’s take a look at another example:&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;unreachable
+i32.const 1
+i32.add
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;unreachable&lt;/code&gt; is a WebAssembly instruction that makes the stack polymorphic.
+This is because if &lt;code class=&quot;highlighter-rouge&quot;&gt;unreachable&lt;/code&gt; is ever executed, the WebAssembly execution
+must “trap” and stop running code. This manifests as an exception when
+WebAssembly is embedded in a JavaScript environment. In any case, the
+instructions after an &lt;code class=&quot;highlighter-rouge&quot;&gt;unreachable&lt;/code&gt; are never executed.&lt;/p&gt;
+
+&lt;p&gt;Here’s what the stack looks like if we could execute this unreachable code
+(where &lt;span class=&quot;cell&quot;&gt;*&lt;/span&gt; is the polymorphic stack):&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;instructions&lt;/th&gt;
+      &lt;th&gt;type stack&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;unreachable&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;span class=&quot;cell&quot;&gt;*&lt;/span&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;i32.const 1&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;span class=&quot;cell&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;cell&quot;&gt;i32&lt;/span&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;i32.add&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;span class=&quot;cell&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;cell&quot;&gt;i32&lt;/span&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;When the &lt;code class=&quot;highlighter-rouge&quot;&gt;i32.add&lt;/code&gt; is excuted, it pops the top value of the stack, which is an
+&lt;code class=&quot;highlighter-rouge&quot;&gt;i32&lt;/code&gt;. Then it pops the next value, which is from the polymorphic stack. Since
+the polymorphic stack gives us whatever we want, we get an &lt;code class=&quot;highlighter-rouge&quot;&gt;i32&lt;/code&gt; here too.
+Finally, &lt;code class=&quot;highlighter-rouge&quot;&gt;i32.add&lt;/code&gt; pushes the sum as a &lt;code class=&quot;highlighter-rouge&quot;&gt;i32&lt;/code&gt;. We know now that the only valid
+concrete stack is &lt;span class=&quot;cell&quot;&gt;i32&lt;/span&gt;. If we substitute this
+for the initial polymorphic stack, we can see why:&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt;instructions&lt;/th&gt;
+      &lt;th&gt;type stack&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;em&gt;initial stack&lt;/em&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;span class=&quot;cell&quot;&gt;i32&lt;/span&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;i32.const 1&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;span class=&quot;cell&quot;&gt;i32&lt;/span&gt;&lt;span class=&quot;cell&quot;&gt;i32&lt;/span&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;i32.add&lt;/code&gt;&lt;/td&gt;
+      &lt;td&gt;&lt;span class=&quot;cell&quot;&gt;i32&lt;/span&gt;&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;Here’s an example where type-checking unreachable code fails:&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;unreachable
+i32.const 1
+f32.mul
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;This is invalid because the &lt;code class=&quot;highlighter-rouge&quot;&gt;f32.mul&lt;/code&gt; expects two &lt;code class=&quot;highlighter-rouge&quot;&gt;f32&lt;/code&gt; operands, but the top
+of the stack has an &lt;code class=&quot;highlighter-rouge&quot;&gt;i32&lt;/code&gt;.&lt;/p&gt;
+
+&lt;h1 id=&quot;odds-and-ends&quot;&gt;Odds and Ends&lt;/h1&gt;
+
+&lt;p&gt;There are a few other operators worth making a quick note about.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;select&lt;/code&gt;: similar to &lt;code class=&quot;highlighter-rouge&quot;&gt;if&lt;/code&gt;, but always evaluates both arms&lt;/li&gt;
+  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;return&lt;/code&gt;: returns from a function; stack is polymorphic afterward&lt;/li&gt;
+  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;call&lt;/code&gt;: calls a function; pops the parameters, pushes the result&lt;/li&gt;
+  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;call_indirect&lt;/code&gt;: calls a function by index; same as &lt;code class=&quot;highlighter-rouge&quot;&gt;call&lt;/code&gt; w.r.t.
+type-checking&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h1 id=&quot;wabt&quot;&gt;Wabt&lt;/h1&gt;
+
+&lt;p&gt;If you want to see how I implemented type-checking, take a look at
+&lt;a href=&quot;https://github.com/WebAssembly/wabt/blob/master/src/type-checker.cc&quot;&gt;wabt’s type-checker&lt;/a&gt;. The
+&lt;a href=&quot;https://github.com/WebAssembly/spec/blob/master/interpreter/valid/valid.ml&quot;&gt;spec interpreter&lt;/a&gt; has an implementation in OCaml as well,
+if you’re curious.&lt;/p&gt;
+
+&lt;p&gt;Whew, this has been a long blog post, and I still didn’t cover everything! If
+you have any questions, just ask me on twitter. If there are enough, I’ll
+probably do a follow-up. Thanks for reading, and see you next time!&lt;/p&gt;</content><author><name>ben smith</name></author><summary type="html">A Stack Machine</summary></entry><entry><title type="html">binjgb on the web, part 2</title><link href="http://localhost:4000/2017/02/27/binjgb-on-the-web-part-2.html" rel="alternate" type="text/html" title="binjgb on the web, part 2" /><published>2017-02-27T19:57:00-08:00</published><updated>2017-02-27T19:57:00-08:00</updated><id>http://localhost:4000/2017/02/27/binjgb-on-the-web-part-2</id><content type="html" xml:base="http://localhost:4000/2017/02/27/binjgb-on-the-web-part-2.html">&lt;p&gt;This is part 2 of a series on &lt;a href=&quot;https://github.com/binji/binjgb&quot;&gt;binjgb&lt;/a&gt;, see &lt;a href=&quot;/2017/02/26/binjgb-on-the-web-part-1.html&quot;&gt;part 1&lt;/a&gt;!&lt;/p&gt;
+
+&lt;h1 id=&quot;webassembly&quot;&gt;WebAssembly&lt;/h1&gt;
+
+&lt;p&gt;&lt;img src=&quot;http://localhost:4000/assets/webassembly.png&quot; alt=&quot;webassembly&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;For the past few years I’ve been contributing to the &lt;a href=&quot;http://webassembly.org/&quot;&gt;WebAssembly&lt;/a&gt;
+project. I primarily have been working on &lt;a href=&quot;https://github.com/WebAssembly/wabt&quot;&gt;wabt&lt;/a&gt;, a suite of tools for
+working with WebAssembly files. It’s been a lot of fun, and I’ve learned a lot
+too. &lt;em&gt;And&lt;/em&gt; there’s a lot I could write about WebAssembly, and I probably will
+at some point. But for now, the only reason I brought it up is because it leads
+to…&lt;/p&gt;
+
+&lt;h1 id=&quot;fullstackfest&quot;&gt;FullStackFest&lt;/h1&gt;
+
+&lt;p&gt;Last year, I was invited to give a talk at &lt;a href=&quot;https://2016.fullstackfest.com/&quot;&gt;FullStackFest&lt;/a&gt; about
+WebAssembly, titled “WebAssembly: birth of a virtual ISA”. The talk is
+basically an overview of WebAssembly, followed by a deep dive where I take C++,
+convert it to the WebAssembly text format, then convert that to the WebAssembly
+binary format, then finally convert it to x86 assembly, all in 30 minutes!&lt;/p&gt;
+
+&lt;iframe width=&quot;560&quot; height=&quot;315&quot; src=&quot;https://www.youtube.com/embed/vmzz17JGPHI&quot; frameborder=&quot;0&quot; allowfullscreen=&quot;&quot;&gt;&lt;/iframe&gt;
+
+&lt;p&gt;I wanted a nice WebAssembly demo for the talk. There’s the
+&lt;a href=&quot;http://webassembly.org/demo/&quot;&gt;AngryBots demo&lt;/a&gt; on the WebAssembly homepage, which is pretty cool,
+but I wanted something that was more &lt;em&gt;me&lt;/em&gt;. I had started working on binjgb
+earlier that year, so it seemed like an obvious choice. It’s not very flashy,
+and sure, there are tons of Gameboy emulators around, but I was proud of my
+little creation and I wanted to show it off!&lt;/p&gt;
+
+&lt;p&gt;Since the talk was about WebAssembly, I needed to get a WebAssembly version
+building, so I started hacking away on it during the week of the conference.
+Without too much effort, I ended up with the code you saw in part 1. Since my
+slides were made using reveal.js, I was easily able to embed the running
+emulator into my slides as an iframe:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;http://localhost:4000/assets/2017-02-27-fsf-demo.jpg&quot; alt=&quot;binjgb slides&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Probably should have spent some time centering the iframe… oh, well. I really
+wanted to get audio working, so you could hear that
+&lt;a href=&quot;https://www.youtube.com/watch?v=Gb33Qnbw520&quot;&gt;dee-da-da-dum, bee–bum&lt;/a&gt;, but I just didn’t have the time. I
+actually didn’t even get it working until earlier this month.&lt;/p&gt;
+
+&lt;h1 id=&quot;webaudio&quot;&gt;WebAudio&lt;/h1&gt;
+
+&lt;p&gt;I’d never used WebAudio before, and it’s a bit tricky to know exactly how
+you’re supposed to use it. If you are just trying to play a wav or mp3, it’s
+pretty easy and straightforward. But what if you’re trying to programatically
+generate audio?&lt;/p&gt;
+
+&lt;p&gt;Most sources point to the &lt;a href=&quot;https://developer.mozilla.org/en-US/docs/Web/API/ScriptProcessorNode&quot;&gt;ScriptProcessorNode&lt;/a&gt; for this.&lt;/p&gt;
+
+&lt;p&gt;Here’s the basic idea:&lt;/p&gt;
+
+&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-javascript&quot; data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;c1&quot;&gt;// Create your audio context.&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;ctx&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;new&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;AudioContext&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;();&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;span class=&quot;c1&quot;&gt;// Create a node w/ buffer size 4096 and one output channel.&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;node&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;new&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;ScriptProcessorNode&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;4096&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;span class=&quot;nx&quot;&gt;node&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;onaudioprocess&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;kd&quot;&gt;function&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;event&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;  &lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;buffer&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;event&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;outputBuffer&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;  &lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;channel&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;buffer&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;getChannelData&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;  &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;i&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;i&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;4096&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;++&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;    &lt;span class=&quot;c1&quot;&gt;// Write samples, f32 in range [-1, 1].&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;    &lt;span class=&quot;nx&quot;&gt;channel&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;...;&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;  &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;span class=&quot;c1&quot;&gt;// Wire the node up to the AudioContext sink.&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;span class=&quot;nx&quot;&gt;node&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;connect&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;ctx&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;destination&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+
+&lt;p&gt;This &lt;em&gt;does&lt;/em&gt; work. But it has a couple problems. First it’s callback based. That
+would be fine if the callback could interrupt your running code. But it can’t,
+so if you’re hogging the main JavaScript thread, then your audio buffer isn’t
+being filled.&lt;/p&gt;
+
+&lt;p&gt;The next problem is that it is deprecated, and has been since August 29th,
+2014, if MDN is to be believed.&lt;/p&gt;
+
+&lt;h1 id=&quot;better-than-scriptprocessornode&quot;&gt;Better than ScriptProcessorNode&lt;/h1&gt;
+
+&lt;p&gt;MDN says that ScriptProcessorNode is deprecated. OK, so what do we use instead?&lt;/p&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;… and is soon to be replaced by Audio Workers.&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;OK, sounds good. So how do you use Audio Workers?&lt;/p&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;Audio workers … are not implemented in any browsers yet.&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;(-_-)&lt;/code&gt;&lt;/p&gt;
+
+&lt;p&gt;So I went to see what Emscripten does. Rather than having the audio engine
+pull samples via a callback, they push buffers down and tell the engine to
+play them at a specific time. Something like this:&lt;/p&gt;
+
+&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-javascript&quot; data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;buffer&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;ctx&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;createBuffer&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;channels&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;samples&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;sampleRate&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;channel&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;buffer&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;getChannelData&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;i&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;i&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;4096&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;++&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;  &lt;span class=&quot;nx&quot;&gt;channel&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;...;&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;bufferSource&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;ctx&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;createBufferSource&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;();&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;span class=&quot;nx&quot;&gt;bufferSource&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;buffer&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;buffer&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;span class=&quot;nx&quot;&gt;bufferSource&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;connect&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;ctx&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;destination&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;span class=&quot;nx&quot;&gt;bufferSource&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;start&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;playTime&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+
+&lt;p&gt;This works surprisingly well! Since we’re pushing the data down, we can do it
+at any time, including during our &lt;code class=&quot;highlighter-rouge&quot;&gt;requestAnimationFrame&lt;/code&gt; callback. We don’t
+have to worry about yielding control of the main thread to allow an audio
+callback to fire.&lt;/p&gt;
+
+&lt;p&gt;To get gapless playback, you just need to make sure that you have the next
+buffer queued up before the current buffer finishes playing. You can determine
+how long this buffer will play by calculating &lt;code class=&quot;highlighter-rouge&quot;&gt;samples / sampleRate&lt;/code&gt;. So the
+next buffer should start playing at &lt;code class=&quot;highlighter-rouge&quot;&gt;playTime + samples / sampleRate&lt;/code&gt;.&lt;/p&gt;
+
+&lt;p&gt;The audio engine has a builtin timer (accessed via &lt;code class=&quot;highlighter-rouge&quot;&gt;ctx.currentTime&lt;/code&gt;) that you
+can use to schedule the playback. The first buffer should start playing a
+little after the current time. The further out you push it, the more time you
+have to queue up the subsequent buffers.&lt;/p&gt;
+
+&lt;p&gt;Speaking of which, here are a few issues that you may run into when
+implementing audio playback…&lt;/p&gt;
+
+&lt;h1 id=&quot;audio-caveats&quot;&gt;Audio Caveats&lt;/h1&gt;
+
+&lt;p&gt;If you’re playing audio and you drop a buffer (i.e. you don’t queue up a buffer
+quickly enough for the audio engine), you’ll immediately hear it as a pop,
+click or crackle. It sounds horrible.&lt;/p&gt;
+
+&lt;video src=&quot;http://localhost:4000/assets/2017-02-27-tetris-audio-crackle.mp4&quot; controls=&quot;&quot;&gt;
+&lt;/video&gt;
+
+&lt;p&gt;The only way to resolve this is to introduce latency – increase the buffer
+size or push out the time between now and when the next buffer plays.
+Increasing the latency means you’re less likely to starve the audio engine, but
+also means that the audio and input will be desynchronized: you press the jump
+button and hear the jump half a second later.&lt;/p&gt;
+
+&lt;video src=&quot;http://localhost:4000/assets/2017-02-27-sml-audio-latency.mp4&quot; controls=&quot;&quot;&gt;
+&lt;/video&gt;
+
+&lt;h1 id=&quot;implementing-webaudio-in-binjgb&quot;&gt;Implementing WebAudio in binjgb&lt;/h1&gt;
+
+&lt;p&gt;I finally had a pretty decent implementation using the above strategy in
+binjgb. You can take a look at the commit &lt;a href=&quot;https://github.com/binji/binjgb/commit/ac7c7887&quot;&gt;here&lt;/a&gt;. One interesting
+aspect is that binjgb generates a 2-channel, interleaved 8-bit audio stream.
+Since WebAudio requires a 32-bit float audio stream, with indpendent channels,
+we have to move things around a bit:&lt;/p&gt;
+
+&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-javascript&quot; data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;channel0&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;buffer&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;getChannelData&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;channel1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;buffer&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;getChannelData&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;outPos&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;inPos&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;i&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;i&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;inSamples&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;++&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;  &lt;span class=&quot;nx&quot;&gt;channel0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;outPos&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;audioBuffer&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;inPos&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;128&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;/&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;128&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;  &lt;span class=&quot;nx&quot;&gt;channel1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;outPos&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;audioBuffer&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;inPos&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;+&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;128&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;/&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;128&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;  &lt;span class=&quot;nx&quot;&gt;outPos&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;++&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;  &lt;span class=&quot;nx&quot;&gt;inPos&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+
+&lt;p&gt;This audio implementation is still pretty much what I have now. There’s still
+more to talk about, though. In my next post, we’ll dive into WebGL!&lt;/p&gt;
+
+&lt;p&gt;In the meantime, I’ll leave you with this, some of my favorite videogame music:&lt;/p&gt;
+
+&lt;video src=&quot;http://localhost:4000/assets/2017-02-27-megaman3-music.mp4&quot; controls=&quot;&quot;&gt;
+&lt;/video&gt;</content><author><name>ben smith</name></author><summary type="html">This is part 2 of a series on binjgb, see part 1!</summary></entry><entry><title type="html">binjgb on the web, part 1</title><link href="http://localhost:4000/2017/02/26/binjgb-on-the-web-part-1.html" rel="alternate" type="text/html" title="binjgb on the web, part 1" /><published>2017-02-26T10:17:00-08:00</published><updated>2017-02-26T10:17:00-08:00</updated><id>http://localhost:4000/2017/02/26/binjgb-on-the-web-part-1</id><content type="html" xml:base="http://localhost:4000/2017/02/26/binjgb-on-the-web-part-1.html">&lt;p&gt;I’ve had an emscripten build of my gameboy emulator &lt;a href=&quot;https://github.com/binji/binjgb&quot;&gt;binjgb&lt;/a&gt; since
+September of last year. At first, I just got enough working to render the
+display. If you just use emscripten’s SDL implementation, it does most of this
+for you automatically, but I wanted to write it myself to see how slim I could
+make it. Take a look at it running:&lt;/p&gt;
+
+&lt;video src=&quot;http://localhost:4000/assets/2017-02-26-sml-jank.mp4&quot; autoplay=&quot;&quot; controls=&quot;&quot;&gt;
+&lt;/video&gt;
+
+&lt;p&gt;This was enough to satisfy me for a while, but I didn’t like that it was so
+janky. Here’s a little snippet of the implementation:&lt;/p&gt;
+
+&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-javascript&quot; data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;kd&quot;&gt;function&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;start&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;  &lt;span class=&quot;p&quot;&gt;...&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;  &lt;span class=&quot;nx&quot;&gt;update&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;();&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;  &lt;span class=&quot;nx&quot;&gt;requestAnimationFrame&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;render&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;span class=&quot;kd&quot;&gt;function&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;update&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;  &lt;span class=&quot;p&quot;&gt;...&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;  &lt;span class=&quot;nx&quot;&gt;_run_emulator_until_event&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(...);&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;  &lt;span class=&quot;p&quot;&gt;...&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;  &lt;span class=&quot;c1&quot;&gt;// Synchronize the host with the emulated gameboy.&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;  &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;real_ms&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;delta_ms&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;    &lt;span class=&quot;nx&quot;&gt;setTimeout&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;update&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;delta_ms&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;  &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;else&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;    &lt;span class=&quot;nx&quot;&gt;setTimeout&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;update&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;  &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;span class=&quot;kd&quot;&gt;function&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;render&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;  &lt;span class=&quot;nx&quot;&gt;ctx&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;putImageData&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;imageData&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;  &lt;span class=&quot;nx&quot;&gt;requestAnimationFrame&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;render&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;&lt;br data-jekyll-commonmark-ghpages=&quot;&quot; /&gt;&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+
+&lt;p&gt;You can see the full commit &lt;a href=&quot;https://github.com/binji/binjgb/commit/03192d3f43662c5aa7ba2522e3b46e839b734021&quot;&gt;here&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;Using the Chrome devtools, you can see some of the issues causing jankiness:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;http://localhost:4000/assets/2017-02-26-initial-jank.png&quot; alt=&quot;initial jank&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;You can read about the timeline view &lt;a href=&quot;https://developers.google.com/web/tools/chrome-devtools/evaluate-performance/timeline-tool&quot;&gt;here&lt;/a&gt;. The important parts
+for us here are the red marks (“long frames”). It looks like Chrome calls a
+frame “long” if it takes longer than 22ms. Since 60fps is 16.6ms per frame,
+this gives considerable leeway before telling you that you screwed up
+somewhere.&lt;/p&gt;
+
+&lt;p&gt;Skipping down, you can see a frame that took 32.0ms. Not good. In this case,
+there isn’t much we could have done because the update just took a long time
+that frame (27.08ms).&lt;/p&gt;
+
+&lt;p&gt;Looking at the frame times after that, there’s definitely room for improvement.
+We’re trying to get as close to 16.6ms as possible. Notice that the frame time
+jumps around a lot: 15.8ms, 16.8ms, 20.9ms, 14.3ms, etc.&lt;/p&gt;
+
+&lt;p&gt;This happens because the timer is firing to try and synchonize the speed of the
+emulator with the speed of a gameboy. The timer callback runs for a while
+(typically between 6-8ms). This blocks the requestAnimationFrame callback from
+running. It will fire as soon as it can, but this will often be later than we
+want for a solid framerate.&lt;/p&gt;
+
+&lt;p&gt;The simplest way to fix this is to use requestAnimationFrame the way it is
+meant be used: do all the work for updating the frame in the
+requestAnimationFrame callback. See the &lt;a href=&quot;http://devdocs.io/dom/window/requestanimationframe&quot;&gt;MDN docs&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;I didn’t get around to improving this until I added audio earlier this month;
+read all about it in the &lt;a href=&quot;/2017/02/27/binjgb-on-the-web-part-2.html&quot;&gt;next post&lt;/a&gt;!&lt;/p&gt;</content><author><name>ben smith</name></author><summary type="html">I’ve had an emscripten build of my gameboy emulator binjgb since September of last year. At first, I just got enough working to render the display. If you just use emscripten’s SDL implementation, it does most of this for you automatically, but I wanted to write it myself to see how slim I could make it. Take a look at it running:</summary></entry></feed>

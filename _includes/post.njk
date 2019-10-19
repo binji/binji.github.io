@@ -1,0 +1,16 @@
+---
+layout: default
+---
+<article class="post" itemscope itemtype="http://schema.org/BlogPosting">
+
+  <header class="post-header">
+    <h1 class="post-title" itemprop="name headline">{{ title | escape }}</h1>
+    {% if date %}
+    <p class="post-meta"><time datetime="{{ date | readableDate }}" itemprop="datePublished">{{ date | readableDate }}</time></p>
+    {% endif %}
+  </header>
+
+  <div class="post-content" itemprop="articleBody">
+    {{ content | safe }}
+  </div>
+</article>
