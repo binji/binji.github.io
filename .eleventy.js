@@ -11,6 +11,8 @@ module.exports = function(eleventyConfig) {
   };
   let markdownLib = markdownIt(options).use(markdownItEmoji);
 
+  eleventyConfig.addPassthroughCopy("2017");
+
   // Copied from https://github.com/11ty/eleventy-base-blog/blob/master/.eleventy.js
   eleventyConfig.addFilter("readableDate", dateObj => {
     return DateTime.fromJSDate(dateObj, {zone: 'utc'}).toFormat("dd LLL yyyy");
