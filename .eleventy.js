@@ -10,6 +10,7 @@ module.exports = function(eleventyConfig) {
     html: true
   };
   let markdownLib = markdownIt(options).use(markdownItEmoji);
+  eleventyConfig.setLibrary("md", markdownLib);
 
   eleventyConfig.addPassthroughCopy("2017");
 
@@ -17,8 +18,6 @@ module.exports = function(eleventyConfig) {
   eleventyConfig.addFilter("readableDate", dateObj => {
     return DateTime.fromJSDate(dateObj, {zone: 'utc'}).toFormat("dd LLL yyyy");
   });
-
-  eleventyConfig.setLibrary("md", markdownLib);
 
   return {
     templateFormats: [
@@ -40,7 +39,7 @@ module.exports = function(eleventyConfig) {
       input: ".",
       includes: "_includes",
       data: "_data",
-      output: "_site"
+      output: "../binji.github.io-deploy"
     }
   };
 }
