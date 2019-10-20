@@ -13,6 +13,7 @@ module.exports = function(eleventyConfig) {
   eleventyConfig.setLibrary("md", markdownLib);
 
   eleventyConfig.addPassthroughCopy("2017");
+  eleventyConfig.addPassthroughCopy("assets");
 
   // Copied from https://github.com/11ty/eleventy-base-blog/blob/master/.eleventy.js
   eleventyConfig.addFilter("readableDate", dateObj => {
@@ -24,10 +25,6 @@ module.exports = function(eleventyConfig) {
       "md",
       "njk",
       "css",
-      "png",
-      "mp4",
-      "gif",
-      "jpg",
       "ico"
     ],
 
