@@ -58,11 +58,11 @@ WebAssembly. Unlike most other assembly languages, WebAssembly wasn't designed
 to be written by hand, and it shows — there are a lot of things that make it
 frustrating for a person to write. On the other hand, just like other assembly
 languages, the fact that it's hard to do makes it fun!</p>
-<p>The first demo I made like this was a <a href="htts://binji.github.io/raw-wasm/doomfire">doomfire demo</a>, which uses the
-technique described in <a href="http://fabiensanglard.net/doom_fire_psx/index.html">Fabien Sanglard's blog</a>. It is all
+<p>The first demo I made like this was a <a href="https://binji.github.io/raw-wasm/doomfire">doomfire demo</a>, which uses the
+technique described in <a href="https://fabiensanglard.net/doom_fire_psx/index.html">Fabien Sanglard's blog</a>. It is all
 contained in a single <a href="https://github.com/binji/raw-wasm/blob/master/doomfire/index.html">HTML file</a>, including the contents of
 the WebAssembly binary file, stored as an array of bytes.</p>
-<p>I didn't write the binary by hand, instead I wrote using the <a href="http://webassembly.github.io/spec/core/text/index.html">WebAssembly text
+<p>I didn't write the binary by hand, instead I wrote using the <a href="https://webassembly.github.io/spec/core/text/index.html">WebAssembly text
 format</a> (<code>.wat</code>), and used the <a href="https://github.com/WebAssembly/wabt">wat2wasm</a> tool to convert it. The text
 format uses an <a href="https://en.wikipedia.org/wiki/S-expression">s-expression</a>-like format, but otherwise doesn't work much
 like lisp. Here's a brief snippet from the <a href="https://github.com/binji/raw-wasm/blob/master/doomfire/fire.wat#L24">doomfire demo</a>:</p>
@@ -70,7 +70,7 @@ like lisp. Here's a brief snippet from the <a href="https://github.com/binji/raw
 <p>This function is run once at the beginning, and fills the bottom of the screen
 with the color 36, which is all white. The fire is drawn from bottom to top,
 fading from bright white, through to yellows, and oranges, then reds, dark
-reds, and finally to black. Again, take a look at <a href="http://fabiensanglard.net/doom_fire_psx/index.html">Fabien's blog</a> for more details.</p>
+reds, and finally to black. Again, take a look at <a href="https://fabiensanglard.net/doom_fire_psx/index.html">Fabien's blog</a> for more details.</p>
 <p>The relevant part for us is how WebAssembly looks. You can see a single <code>loop</code>,
 a local index variable <code>$i</code>, writing a byte to memory with the <code>i32.store8</code>
 instruction, and performing a conditional branch with the <code>br_if</code> instruction.</p>
@@ -121,13 +121,13 @@ little smaller, until I hit a goal (&quot;less than 2000 bytes!&quot;) or I got 
 Usually, a few weeks later, I'd get inspired again and work on the next one.</p>
 <h2>What's next?</h2>
 <p>I finished the snake game back in June as part of a hack day with my friend
-<a href="http://twitter.com/torch2424">Aaron</a> (who made an awesome wasm matrix demo that day!).</p>
+<a href="https://twitter.com/torch2424">Aaron</a> (who made an awesome wasm matrix demo that day!).</p>
 <div class="twitter">
 <blockquote class="twitter-tweet"><p lang="en" dir="ltr">Super overdue on my Saturday Hack Day project, but here it is! 👍🏾<br><br>What if I told you <a href="https://twitter.com/hashtag/AssemblyScript?src=hash&amp;ref_src=twsrc%5Etfw">#AssemblyScript</a> has WASI bindings, and Wasmer&#39;s new WAPM is a great for it? 🤔<br><br>So I built the matrix for <a href="https://twitter.com/hashtag/webassembly?src=hash&amp;ref_src=twsrc%5Etfw">#webassembly</a> 😎🖥️🎉 <br><br>`wapm install -g torch2424/wasm-matrix`<a href="https://t.co/cecBCdt8sw">https://t.co/cecBCdt8sw</a> <a href="https://t.co/vwVCvYP9Bu">pic.twitter.com/vwVCvYP9Bu</a></p>&mdash; Aaron Turner (@torch2424) <a href="https://twitter.com/torch2424/status/1129089108322578432?ref_src=twsrc%5Etfw">May 16, 2019</a></blockquote> <script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
 </div>
 <p>Each of my demos was getting more complex (and larger), and I wasn't sure what
 I'd do next. My colleague <a href="https://twitter.com/wvo">Wouter</a> suggested I make a little Wolfenstein
-3D-like demo. I have a copy of Fabien Sanglard's <a href="http://fabiensanglard.net/gebbwolf3d/">Game Engine Black Book on
+3D-like demo. I have a copy of Fabien Sanglard's <a href="https://fabiensanglard.net/gebbwolf3d/">Game Engine Black Book on
 Wolfenstein 3D</a>, so this seemed like a pretty good idea. But I
 didn't have much time to work on it until earlier this month.</p>
 <h2>Maze Race</h2>
