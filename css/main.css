@@ -215,6 +215,30 @@ td { padding: 3px 10px; }
 
 .cell { border-radius: 6px; background-color: #5affc3; padding: 2px 6px; margin: 2px; }
 
-article video, article img, article iframe, article table, figure.highlight { margin: 20px 0; }
+article video, article img, article iframe, article table, figure.highlight, article .twitter { margin: 20px 0; }
 
 article video { width: 100%; height: auto; }
+
+article .wasm-demo {
+  display: flex;
+  margin: 20px 0;
+}
+
+.wasm-demo iframe {
+  margin: 0;
+}
+
+.wasm-demo > .iframe-wrapper {
+  padding: 4px;
+  border: 2px solid;
+  margin: auto;
+}
+
+.wasm-demo .info {
+  max-width: inherit;
+  font-style: italic;
+}
+
+.wasm-demo .size {
+  font-weight: bold;
+}

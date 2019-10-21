@@ -1,7 +1,7 @@
 ---
 tags: post
 layout: post
-title: "raw wasm: making a maze race"
+title: "raw wasm: making a maze race, part 1"
 date: 2019-10-20
 ---
 
@@ -17,10 +17,10 @@ to be written by hand, and it shows — there are a lot of things that make it
 frustrating for a person to write. On the other hand, just like other assembly
 languages, the fact that it's hard to do makes it fun!
 
-The first demo I made like this was a [doomfire demo][doomfire demo], which
-uses the technique described in [Fabien Sanglard's blog][doomfire blog]. It is
-all contained in a single [HTML file][doomfire source], including the contents
-of the WebAssembly binary file, stored as an array of bytes.
+The first demo I made like this was a [doomfire demo][], which uses the
+technique described in [Fabien Sanglard's blog][doomfire blog]. It is all
+contained in a single [HTML file][doomfire source], including the contents of
+the WebAssembly binary file, stored as an array of bytes.
 
 I didn't write the binary by hand, instead I wrote using the [WebAssembly text
 format][] (`.wat`), and used the [wat2wasm][] tool to convert it. The text
@@ -84,7 +84,11 @@ frame in a [requestAnimationFrame][] callback. The final `.wat` file is 107
 lines, of code. Converting this from text to binary produces a 398 byte `.wasm`
 file, which I've embedded directly into the HTML. Here's the final result:
 
-<iframe width="400" height="300" src="https://binji.github.io/raw-wasm/doomfire/"></iframe>
+<div class="wasm-demo">
+  <div class="iframe-wrapper">
+    <iframe width="400" height="300" src="https://binji.github.io/raw-wasm/doomfire/"></iframe>
+  </div>
+</div>
 
 I made this demo back in May. After I did, my colleague [Bill][] told me I
 should call it "raw" wasm, which I thought was a fun name. Since then, I've
@@ -94,10 +98,16 @@ made a few other demos:
 * A [raytracer][raytrace] with 4 spheres, 1 light, reflections and shadows in **1486 bytes**
 * A [snake-like game][snake], but with 360° rotation in **1976 bytes**
 
+You can find the source for all of these demos on GitHub in my [raw-wasm
+repo][raw wasm]. Just a warning though: I do this just for fun; real
+WebAssembly shouldn't be written by hand!
+
 [Colin Eberhardt][] even joined in to make one, loosely based on my metaball
 demo!
 
+<div class="twitter">
 <blockquote class="twitter-tweet"><p lang="en" dir="ltr">Just for fun - here&#39;s a funky interference pattern hand coded in WebAssembly <a href="https://t.co/hbu9axEvtT">https://t.co/hbu9axEvtT</a> <br>Inspired by <a href="https://t.co/lXqFnP3d5t">https://t.co/lXqFnP3d5t</a> from <a href="https://twitter.com/binjimint?ref_src=twsrc%5Etfw">@binjimint</a> / <a href="https://twitter.com/torch2424?ref_src=twsrc%5Etfw">@torch2424</a> - and with the help of Aer Lingus and my flight delay 😭 <a href="https://t.co/F36m109MJ2">pic.twitter.com/F36m109MJ2</a></p>&mdash; Colin Eberhardt (@ColinEberhardt) <a href="https://twitter.com/ColinEberhardt/status/1128701985757253632?ref_src=twsrc%5Etfw">May 15, 2019</a></blockquote> <script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
+</div>
 
 For each of the demos, I made some rules for myself. I could import a few
 helpful functions from JavaScript (`Math.sin`, `Math.random`), but it would be
@@ -116,7 +126,9 @@ Usually, a few weeks later, I'd get inspired again and work on the next one.
 I finished the snake game back in June as part of a hack day with my friend
 [Aaron][] (who made an awesome wasm matrix demo that day!).
 
+<div class="twitter">
 <blockquote class="twitter-tweet"><p lang="en" dir="ltr">Super overdue on my Saturday Hack Day project, but here it is! 👍🏾<br><br>What if I told you <a href="https://twitter.com/hashtag/AssemblyScript?src=hash&amp;ref_src=twsrc%5Etfw">#AssemblyScript</a> has WASI bindings, and Wasmer&#39;s new WAPM is a great for it? 🤔<br><br>So I built the matrix for <a href="https://twitter.com/hashtag/webassembly?src=hash&amp;ref_src=twsrc%5Etfw">#webassembly</a> 😎🖥️🎉 <br><br>`wapm install -g torch2424/wasm-matrix`<a href="https://t.co/cecBCdt8sw">https://t.co/cecBCdt8sw</a> <a href="https://t.co/vwVCvYP9Bu">pic.twitter.com/vwVCvYP9Bu</a></p>&mdash; Aaron Turner (@torch2424) <a href="https://twitter.com/torch2424/status/1129089108322578432?ref_src=twsrc%5Etfw">May 16, 2019</a></blockquote> <script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
+</div>
 
 Each of my demos was getting more complex (and larger), and I wasn't sure what
 I'd do next. My colleague [Wouter][] suggested I make a little Wolfenstein
@@ -332,7 +344,7 @@ vector that is perpendicular to that direction:
 
 $$ \textbf{d} = \textbf{f} + \frac{x - 160}{160} \textbf{f}_\perp $$
 
-[image of rays]
+![rays][]
 
 This means most rays will not have a length of 1. This is actually what we want
 for projection. If we normalize the ray, we'll get curved walls instead.
@@ -369,10 +381,19 @@ for projection. If we normalize the ray, we'll get curved walls instead.
         (i32.const 320))))
 ```
 
-This will produce a demo like this. Use the arrow keys to move, or tap on the
-left or right side of the screen to turn. (**662 bytes**)
+Here's a demo of this in action! The code here also includes the ability to
+move around, which requires a little extra wasm and javascript code.
 
-<iframe width="400" height="300" src="/assets/2019-10-20-one-wall.html"></iframe>
+<div class="wasm-demo">
+  <div class="iframe-wrapper">
+    <iframe width="400" height="300" src="/assets/2019-10-20-one-wall.html"></iframe>
+    <div class="info" style="max-width: 400px;">
+      Use the arrow keys to move, or tap on the left or right side of the screen to turn. <span class="size">662 bytes</span>.
+    </div>
+    <a href="https://github.com/binji/binji.github.io/blob/master/assets/2019-10-20-one-wall.html">(HTML source)</a>
+    <a href="https://gist.github.com/binji/ca4c52fa5917a7558b0775f8aad82313">(.wat source)</a>
+  </div>
+</div>
 
 Progress!
 
@@ -455,9 +476,18 @@ Then we can add a loop over each wall, and record the minimum distance:
 ```
 
 Here's the updated demo with four walls. These walls are just visual for now,
-they can't hold us back! (**726 bytes**)
+they can't hold us back! 
 
-<iframe width="400" height="300" src="/assets/2019-10-20-four-walls.html"></iframe>
+<div class="wasm-demo">
+  <div class="iframe-wrapper">
+    <iframe width="400" height="300" src="/assets/2019-10-20-four-walls.html"></iframe>
+    <div class="info" style="max-width: 400px;">
+      Use the arrow keys to move, or tap on the left or right side of the screen to turn. <span class="size">726 bytes</span>.
+    </div>
+    <a href="https://github.com/binji/binji.github.io/blob/master/assets/2019-10-20-four-walls.html">(HTML source)</a>
+    <a href="https://gist.github.com/binji/fea1d2e81e9c32c2829b156252cce43a">(.wat source)</a>
+  </div>
+</div>
 
 ### Step 5: Texturing
 
@@ -655,9 +685,18 @@ So the new code for drawing a wall pixel is:
         (i32.mul (local.get $height) (i32.const 2))))))
 ```
 
-Finally, we can try it out! (**1173 bytes**)
+Finally, we can try it out! 
 
-<iframe width="400" height="300" src="/assets/2019-10-20-textured.html"></iframe>
+<div class="wasm-demo">
+  <div class="iframe-wrapper">
+    <iframe width="400" height="300" src="/assets/2019-10-20-textured.html"></iframe>
+    <div class="info" style="max-width: 400px;">
+      Use the arrow keys to move, or tap on the left or right side of the screen to turn. <span class="size">1173 bytes</span>.
+    </div>
+    <a href="https://github.com/binji/binji.github.io/blob/master/assets/2019-10-20-textured.html">(HTML source)</a>
+    <a href="https://gist.github.com/binji/3c32bf59856487b59a6620756c96ec7a">(.wat source)</a>
+  </div>
+</div>
 
 Did you notice that the texture is doubled up? We can add a single line to
 `$frac-i32` to do this:
@@ -688,6 +727,7 @@ This post is getting pretty long already! In the next one I'll add:
 [metaball]: https://binji.github.io/raw-wasm/metaball
 [raytrace]: https://binji.github.io/raw-wasm/raytrace
 [snake]: https://binji.github.io/raw-wasm/snake
+[raw wasm]: https://github.com/binji/raw-wasm
 [Colin Eberhardt]: https://twitter.com/ColinEberhardt
 [Aaron]: http://twitter.com/torch2424
 [Wouter]: https://twitter.com/wvo
@@ -695,6 +735,7 @@ This post is getting pretty long already! In the next one I'll add:
 [wolf3d rendering]: /assets/2019-10-20-rendering.png
 [wolf3d grid]: /assets/2019-10-20-grid-based.png
 [ray line]: https://rootllama.wordpress.com/2014/06/20/ray-line-segment-intersection-test-in-2d/
+[rays]: /assets/2019-10-20-rays.png
 [python struct]: https://docs.python.org/3/library/struct.html
 [GIMP]: https://www.gimp.org/
 [PPM]: https://en.wikipedia.org/wiki/Netpbm_format
