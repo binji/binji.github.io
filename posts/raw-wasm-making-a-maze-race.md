@@ -715,10 +715,10 @@ This post is getting pretty long already! In the next one I'll add:
 * Handling collisions with walls
 * Making it into a real game (different modes)
 
-[doomfire demo]: htts://binji.github.io/raw-wasm/doomfire
-[doomfire blog]: http://fabiensanglard.net/doom_fire_psx/index.html
+[doomfire demo]: https://binji.github.io/raw-wasm/doomfire
+[doomfire blog]: https://fabiensanglard.net/doom_fire_psx/index.html
 [doomfire source]: https://github.com/binji/raw-wasm/blob/master/doomfire/index.html
-[WebAssembly text format]: http://webassembly.github.io/spec/core/text/index.html
+[WebAssembly text format]: https://webassembly.github.io/spec/core/text/index.html
 [wat2wasm]: https://github.com/WebAssembly/wabt
 [s-expression]: https://en.wikipedia.org/wiki/S-expression
 [setup func]: https://github.com/binji/raw-wasm/blob/master/doomfire/fire.wat#L24
@@ -729,9 +729,9 @@ This post is getting pretty long already! In the next one I'll add:
 [snake]: https://binji.github.io/raw-wasm/snake
 [raw wasm]: https://github.com/binji/raw-wasm
 [Colin Eberhardt]: https://twitter.com/ColinEberhardt
-[Aaron]: http://twitter.com/torch2424
+[Aaron]: https://twitter.com/torch2424
 [Wouter]: https://twitter.com/wvo
-[wolf3d book]: http://fabiensanglard.net/gebbwolf3d/
+[wolf3d book]: https://fabiensanglard.net/gebbwolf3d/
 [wolf3d rendering]: /assets/2019-10-20-rendering.png
 [wolf3d grid]: /assets/2019-10-20-grid-based.png
 [ray line]: https://rootllama.wordpress.com/2014/06/20/ray-line-segment-intersection-test-in-2d/
