@@ -712,8 +712,9 @@ This post is getting pretty long already! In the next one I'll add:
 * Texturing the floor and ceiling
 * Shrinking the texture further with RLE compression
 * Randomly generating a maze
-* Handling collisions with walls
-* Making it into a real game (different modes)
+
+[Read part 2 now!][part 2]
+
 
 [doomfire demo]: https://binji.github.io/raw-wasm/doomfire
 [doomfire blog]: https://fabiensanglard.net/doom_fire_psx/index.html
@@ -739,3 +740,4 @@ This post is getting pretty long already! In the next one I'll add:
 [python struct]: https://docs.python.org/3/library/struct.html
 [GIMP]: https://www.gimp.org/
 [PPM]: https://en.wikipedia.org/wiki/Netpbm_format
+[part 2]: /posts/raw-wasm-making-a-maze-race-part-2/
