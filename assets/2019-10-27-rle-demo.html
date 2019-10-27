@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<head>
+  <style>
+    body {
+      position: absolute;
+      display: flex;
+      flex-direction: column;
+      background-color: #fff;
+      margin: 0;
+      width: 100%;
+      height: 100%;
+    }
+    svg {
+      width: 100%;
+      height: 100%;
+    }
+
+    text {
+      font: 24px monospace;
+      transition: transform 0.6s;
+      transition-timing-function: ease-in-out;
+    }
+    text.bracket {
+      fill: gray;
+    }
+    text.count {
+      fill: green;
+    }
+    text.scount {
+      fill: red;
+    }
+    text.letter {
+      fill: black;
+    }
+
+    .ui {
+      display: flex;
+      flex-direction: row;
+      margin: 10px;
+    }
+    #range {
+      flex-grow: 1;
+    }
+    #prev {
+      margin-left: 10px;
+    }
+    #next {
+      margin-right: 10px;
+    }
+    #new, .text {
+      margin: 0 10px;
+    }
+
+    #stepText {
+      font: 18px sans-serif;
+      width: 100%;
+      text-align: center;
+      margin: 10px 0;
+    }
+  </style>
+</head>
+<body>
+  <span id="stepText"></span>
+  <svg width="420" height="300" xmlns="http://www.w3.org/2000/svg">
+  </svg>
+  <div class="ui">
+    <input id="new" type="button" value="new">
+    <input id="prev" type="button" value="&lt;">
+    <input id="next" type="button" value="&gt;">
+    <input id="range" type="range" min="0" max="4" value="0">
+    <span class="text">step: <span id="step">0</span></span>
+  </div>
+  <script>
+    const ns = "http://www.w3.org/2000/svg";
+    let curStep = 0;
+
+    const svgEl = document.querySelector('svg');
+    const newEl = document.querySelector('#new');
+    const prevEl = document.querySelector('#prev');
+    const nextEl = document.querySelector('#next');
+    const rangeEl = document.querySelector('#range');
+    const stepEl = document.querySelector('#step');
+    const stepTextEl = document.querySelector('#stepText');
+
+    newEl.addEventListener('click', event => reset());
+    prevEl.addEventListener('click', event => update(curStep - 1));
+    nextEl.addEventListener('click', event => update(curStep + 1));
+    rangeEl.addEventListener('input', event => update(event.target.value));
+
+    const cw = 420;
+    const ch = 300;
+
+    const tw = 16;
+    const th = 32;
+
+    const genLength = 10;
+    const genChars = 3;
+
+    let orig;
+    let data;
+    let info;
+    let nextId = 0;
+
+    function wrap(value, style) {
+      if ((value instanceof Atom) ||
+          (value instanceof List) ||
+          (value instanceof Combined)) {
+        return value;
+      } else {
+        return new Atom(value, style);
+      }
+    }
+
+    class LineWrapped extends Error {};
+
+    class Node {
+      constructor(atom) {
+        this.id = atom.id;
+        this.el = document.createElementNS(ns, 'text');
+        if (atom.className) {
+          this.el.classList.add(atom.className);
+        }
+        svgEl.appendChild(this.el);
+        this.steps = [];
+      }
+
+      setPos(info) {
+        this.steps[info.step] = {x: info.x, y: info.y, scale: 1};
+      }
+
+      get text() {
+        return this.el.textContent;
+      }
+
+      set text(t) {
+        this.el.textContent = t;
+      }
+    }
+
+    function getNode(info, atom) {
+      let node;
+      let id = atom.id;
+      if (info.nodes[id] !== undefined) {
+        node = info.nodes[id];
+      } else {
+        node = new Node(atom);
+        info.nodes[id] = node;
+      }
+      return node;
+    }
+
+    class Atom {
+      constructor(value, className) {
+        this.id = nextId++;
+        this.value = value;
+        this.className = className;
+      }
+
+      gen(info, parentCanSplit, indent) {
+        let node = getNode(info, this);
+        let text = this.value.toString();
+        let width = tw * text.length;
+        if (info.x + width > cw) {
+          throw new LineWrapped();
+        }
+
+        node.setPos(info);
+        node.text = text;
+        info.x += width;
+      }
+    }
+
+    class List {
+      constructor(prev=null) {
+        this.left = prev ? prev.left : new Atom('[', 'bracket');
+        this.right = prev ? prev.right : new Atom(']', 'bracket');
+        this.values = [];
+      }
+
+      push(value, className='') {
+        this.values.push(wrap(value, className));
+      }
+
+      get(index) { return this.values[index]; }
+      set(index, value, className) { this.values[index] = wrap(value, className); }
+
+      get length() {
+        return this.values.length;
+      }
+
+      forEach(f) {
+        for (let i = 0; i < this.length; ++i) {
+          f(this.get(i));
+        }
+      }
+
+      gen(info, parentCanSplit, indent) {
+        let i = 0;
+        let canSplit = parentCanSplit;
+
+        this.left.gen(info, canSplit);
+
+        while (true) {
+          try {
+            for (; i < this.length; ++i) {
+              this.get(i).gen(info, canSplit, indent + 1);
+              if (i != this.length - 1) {
+                info.x += tw / 2;
+                canSplit = true;
+              }
+            }
+            this.right.gen(info, canSplit);
+            break;
+          } catch (e) {
+            if (e instanceof LineWrapped) {
+              if (parentCanSplit) {
+                // Let paren't handle it.
+                throw e;
+              }
+              // Paren't can't split, so we'll do it.
+              if (i == this.length) {
+                // Don't write the right bracket by itself.
+                --i;
+              }
+              info.x = indent * tw;
+              info.y += th;
+              canSplit = false;
+            }
+          }
+        }
+      }
+    }
+
+    class Tuple extends List {
+      constructor(prev) {
+        super(prev);
+        this.left.value = '(';
+        this.right.value = ')';
+      }
+
+      get count() {
+        return this.get(0);
+      }
+
+      get value() {
+        return this.get(1);
+      }
+      set value(newValue) {
+        this.set(1, newValue);
+      }
+    }
+
+    class Combined {
+      constructor(atom) {
+        this.atoms = [atom];
+      }
+
+      combine(atom) {
+        this.atoms.push(atom);
+      }
+
+      get value() {
+        return this.atoms[0].value;
+      }
+
+      gen(info, parentCanSplit, indent) {
+        let oldX = info.x;
+        for (let atom of this.atoms) {
+          info.x = oldX;
+          atom.gen(info, parentCanSplit, indent);
+        }
+      }
+    }
+
+    function combine(left, right) {
+      if (!(left instanceof Combined)) {
+        left = new Combined(left);
+      }
+      left.combine(right);
+      return left;
+    }
+
+    function step0(data) {
+      let result = new List();
+      for (let letter of data) {
+        result.push(letter, 'letter');
+      }
+      return result;
+    }
+
+    function step1(prev) {
+      let result = new List(prev);
+      let oldTuple = null;
+      prev.forEach(atom => {
+        if (!oldTuple || atom.value != oldTuple.value.value) {
+          let tuple = new Tuple();
+          tuple.push(1, 'count');
+          tuple.push(atom);
+          oldTuple = tuple;
+          result.push(tuple);
+        } else {
+          oldTuple.count.value++;
+          oldTuple.value = combine(oldTuple.value, atom);
+        }
+      });
+      return result;
+    }
+
+    function isSingleton(tuple) {
+      return tuple.count.value == 1;
+    }
+
+    function step2(prev) {
+      let result = new List(prev);
+      let oldList = null;
+      prev.forEach(tuple => {
+        if (!oldList || isSingleton(oldList.get(0)) != isSingleton(tuple)) {
+          oldList = new List();
+          oldList.push(tuple);
+          result.push(oldList);
+        } else {
+          oldList.push(tuple);
+        }
+      });
+      return result;
+    }
+
+    function step3(prev) {
+      let result = new List(prev);
+      prev.forEach(list => {
+        let newList = new List(list);
+        if (isSingleton(list.get(0))) {
+          newList.push(256 - list.length, 'scount');
+          list.forEach(item => {
+            newList.push(item.value);
+          });
+        } else {
+          list.forEach(item => {
+            newList.push(item.count);
+            newList.push(item.value);
+          });
+        }
+        result.push(newList);
+      });
+      return result;
+    }
+
+    function step4(prev) {
+      let result = new List(prev);
+      prev.forEach(list => {
+        list.forEach(item => {
+          result.push(item);
+        });
+      });
+      return result;
+    }
+
+    function gen(info, data) {
+      data.gen(info, false, 1);
+      info.x = 0;
+      info.y += th;
+      info.step += 1;
+      return data;
+    }
+
+    function reset() {
+      // Remove all children.
+      while (svgEl.firstChild) {
+        svgEl.removeChild(svgEl.firstChild);
+      }
+
+      nextId = 0;
+
+      orig = [];
+      for (let i = 0; i < genLength; ++i) {
+        orig.push(String.fromCharCode(97 + (Math.random() * genChars)));
+      }
+
+      info = {step: 0, x: 0, y: th, nodes: []};
+      data = gen(info, step0(orig));
+      data = gen(info, step1(data));
+      data = gen(info, step2(data));
+      data = gen(info, step3(data));
+      data = gen(info, step4(data));
+
+      // Make sure all steps have values; scale to 0 if the element doesn't exist
+      // for this step.
+      for (let node of info.nodes) {
+        for (let step = 0; step < 5; ++step) {
+          if (!node.steps[step] && node.steps[step - 1]) {
+            let {x, y} = node.steps[step - 1];
+            node.steps[step] = {x, y, scale: 0};
+          }
+        }
+        for (let step = 4; step >= 0; --step) {
+          if (!node.steps[step] && node.steps[step + 1]) {
+            let {x, y} = node.steps[step + 1];
+            node.steps[step] = {x, y, scale: 0};
+          }
+        }
+      }
+
+      update(curStep, true);
+    }
+
+    function update(newStep, force=false) {
+      newStep = parseInt(newStep);
+      if (newStep < 0 || newStep > 4 || (!force && curStep == newStep)) {
+        return;
+      }
+      curStep = newStep;
+
+      rangeEl.value = newStep;
+      stepEl.textContent = newStep;
+
+      stepTextEl.innerHTML = `<b>Step ${newStep}:</b> ` + [
+        'Initial data',
+        'Group values into runs',
+        'Group runs into singleton and non',
+        'Combine singleton runs, flatten others',
+        'Flatten all lists'
+      ][newStep];
+
+      for (let node of info.nodes) {
+        let el = node.el;
+        if (node.steps[newStep]) {
+          let {x, y, scale} = node.steps[newStep];
+          el.style.transform = `translate(${x}px, ${y}px) scale(${scale}, 1)`;
+        } else if (node.steps[newStep - 1]) {
+          let {x, y} = node.steps[newStep - 1];
+          el.style.transform = `translate(${x}px, ${y}px) scale(0, 1)`;
+        }
+      }
+    }
+
+    reset();
+
+  </script>
+
+
+</body>

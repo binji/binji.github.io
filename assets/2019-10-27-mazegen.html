@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<head>
+  <style>
+   body {
+      position: absolute;
+      display: flex;
+      flex-direction: column;
+      background-color: #fff;
+      margin: 0;
+      width: 100%;
+      height: 100%;
+    }
+    canvas {
+      object-fit: contain;
+      width: 100%;
+      height: 100%;
+    }
+    .ui {
+      display: flex;
+      flex-direction: row;
+      margin: 4px;
+    }
+    #range {
+      flex-grow: 1;
+    }
+    #prev {
+      margin-left: 4px;
+    }
+    #next {
+      margin-right: 4px;
+    }
+    #new, .text {
+      margin: 0 4px;
+    }
+  </style>
+</head>
+<body>
+  <canvas width="400" height="400"></canvas>
+  <div class="ui">
+    <input id="new" type="button" value="new">
+    <input id="prev" type="button" value="&lt;">
+    <input id="next" type="button" value="&gt;">
+    <input id="range" type="range" min="0" max="143" value="0">
+    <span class="text">step: <span id="step">0</span></span>
+    <span class="text">walls: <span id="walls">264</span></span>
+  </div>
+
+  <script>
+    let seed;
+    let curStep = 0;
+    const cw = 400;
+    const ch = 400;
+    const border = 10;
+    const gw = cw - border * 2;
+    const gh = ch - border * 2;
+    const cellw = gw / 12;
+    const cellh = gh / 12;
+
+    const canvas = document.querySelector('canvas');
+    const ctx = canvas.getContext('2d');
+
+    const newEl = document.querySelector('#new');
+    const prevEl = document.querySelector('#prev');
+    const nextEl = document.querySelector('#next');
+    const rangeEl = document.querySelector('#range');
+    const stepEl = document.querySelector('#step');
+    const wallsEl = document.querySelector('#walls');
+    newEl.addEventListener('click', event => newSeed());
+    prevEl.addEventListener('click', event => update(curStep - 1));
+    nextEl.addEventListener('click', event => update(curStep + 1));
+    rangeEl.addEventListener('input', event => update(event.target.value));
+
+    function newSeed() {
+      seed = (Math.random() * 0x100000000) >>> 0;
+      update(curStep, true);
+    };
+
+    // https://en.wikipedia.org/wiki/Xorshift
+    function xorshift(state) {
+      let x = state.a;
+      x ^= x << 13;
+      x ^= x >> 17;
+      x ^= x << 5;
+      x >>>= 0;
+      state.a = x;
+      return x;
+    }
+
+    function rand(state, min, max) {
+      const x = xorshift(state);
+      return ((x / 0x100000000) * (max - min) | 0) + min;
+    }
+
+    function getPos(s) {
+      const x = ((s % 12) + 1) * cellw + border;
+      const y = (((s / 12) | 0) + 1) * cellh + border;
+      return {x, y};
+    }
+
+    function drawWall(wall) {
+      const [s1, s2] = wall;
+      const {x: x1, y: y1} = getPos(s1);
+      let x2 = x1;
+      let y2 = y1;
+      if (s2 == s1 + 1) {
+        y2 -= cellh;
+      } else {
+        x2 -= cellw;
+      }
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+    };
+
+    function update(newStep, force=false) {
+      newStep = parseInt(newStep);
+      if (newStep < 0 || newStep > 143 || (!force && curStep == newStep)) {
+        return;
+      }
+      curStep = newStep;
+
+      const maxWalls = 12*11*2;
+
+      rangeEl.value = newStep;
+      stepEl.textContent = newStep;
+      wallsEl.textContent = maxWalls - newStep;
+
+      const state = {a: seed};
+      const cells = [];
+      const walls = [];
+
+      const updatedCells = new Set();
+      let removedWall;
+
+      for (let y = 0; y < 12; ++y) {
+        for (let x = 0; x < 12; ++x) {
+          const i = y * 12 + x;
+          cells[i] = i;
+          if (x < 11) walls.push([i, i + 1]);
+          if (y < 11) walls.push([i, i + 12]);
+        }
+      }
+
+      while (walls.length > maxWalls - curStep) {
+        const wall = rand(state, 0, walls.length);
+        const [s1, s2] = walls[wall];
+        const c1 = cells[s1];
+        const c2 = cells[s2];
+
+        if (c1 != c2) {
+          const isLast = walls.length - 1 == maxWalls - curStep;
+          if (isLast) {
+            removedWall = walls[wall];
+          }
+
+          walls[wall] = walls[walls.length - 1];
+          walls.pop();
+
+          for (let i = 0; i < cells.length; ++i) {
+            if (cells[i] == c2) {
+              cells[i] = c1;
+              if (isLast) {
+                updatedCells.add(i);
+              }
+            }
+          }
+        }
+      }
+
+      // Clear canvas, and draw border.
+      ctx.clearRect(0, 0, cw, ch);
+      ctx.strokeRect(border, border, gw, gh);
+
+      // Draw cells.
+      ctx.font = '12px mono';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      for (let i = 0; i < cells.length; ++i) {
+        let {x, y} = getPos(i);
+        if (updatedCells.has(i)) {
+          ctx.fillStyle = 'lightblue';
+          ctx.fillRect(x - cellw, y - cellh, cellw, cellh);
+        }
+        ctx.fillStyle = 'black';
+        ctx.fillText(cells[i], x - cellw * 0.5, y - cellh * 0.5);
+      }
+
+      // Draw removed wall.
+      ctx.strokeStyle = 'red';
+      ctx.setLineDash([2]);
+      if (removedWall) {
+        drawWall(removedWall);
+      }
+
+      // Draw other walls.
+      ctx.strokeStyle = 'black';
+      ctx.setLineDash([]);
+      for (let wall of walls) {
+        drawWall(wall);
+      }
+    }
+
+    newSeed();
+  </script>
+</body>
