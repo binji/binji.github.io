@@ -17,6 +17,8 @@
 
     text {
       font: 24px monospace;
+    }
+    g {
       transition: transform 0.6s;
       transition-timing-function: ease-in-out;
     }
@@ -116,10 +118,16 @@
     class Node {
       constructor(atom) {
         this.id = atom.id;
-        this.el = document.createElementNS(ns, 'text');
+        this.textEl = document.createElementNS(ns, 'text');
         if (atom.className) {
-          this.el.classList.add(atom.className);
+          this.textEl.classList.add(atom.className);
         }
+
+        // Safari doesn't support transformations on text elements, but it
+        // works if you wrap it in a <g>.
+        this.el = document.createElementNS(ns, 'g');
+        this.el.appendChild(this.textEl);
+
         svgEl.appendChild(this.el);
         this.steps = [];
       }
@@ -129,11 +137,11 @@
       }
 
       get text() {
-        return this.el.textContent;
+        return this.textEl.textContent;
       }
 
       set text(t) {
-        this.el.textContent = t;
+        this.textEl.textContent = t;
       }
     }
 
@@ -416,8 +424,8 @@
       stepTextEl.innerHTML = `<b>Step ${newStep}:</b> ` + [
         'Initial data',
         'Group values into runs',
-        'Group runs into singleton and non',
-        'Combine singleton runs, flatten others',
+        'Group singleton runs',
+        'Merge singleton runs',
         'Flatten all lists'
       ][newStep];
 
