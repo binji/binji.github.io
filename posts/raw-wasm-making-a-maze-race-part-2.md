@@ -627,8 +627,8 @@ Try playing with this demo to see how it works:
   </div>
 </div>
 
-I made the brick texture less noisy, compressed the textures, and ended a total
-of 256 bytes for both!
+I made the brick texture less noisy, compressed the textures, and ended up with
+a total of 256 bytes for both!
 
 ```wasm
 (data (i32.const 0x400)
