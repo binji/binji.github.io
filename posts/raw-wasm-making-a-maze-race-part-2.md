@@ -2,7 +2,7 @@
 tags: post
 layout: post
 title: "raw wasm: making a maze race, part 2"
-date: 2020-10-27
+date: 2019-10-27
 ---
 
 <script type="text/javascript"
