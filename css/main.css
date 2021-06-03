@@ -242,3 +242,18 @@ article .wasm-demo {
 .wasm-demo .size {
   font-weight: bold;
 }
+
+.td-colspan {
+  text-align:center;
+  border: 1px solid grey;
+}
+
+.pokepal0 { color: #111111; background-color: #ffffff; }
+.pokepal1 { color: #111111; background-color: #ff8484; }
+.pokepal2 { color: #eeeeee; background-color: #943a3a; }
+.pokepal3 { color: #eeeeee; background-color: #000000; }
+.pokepal4 { color: #111111; background-color: #ffffff; }
+.pokepal5 { color: #111111; background-color: #63a5ff; }
+.pokepal6 { color: #eeeeee; background-color: #0000ff; }
+.pokepal7 { color: #eeeeee; background-color: #000000; }
+.pokeborder { border: 2px solid red; }
