@@ -40,7 +40,7 @@ lines and a total of 7786 bytes, with 5954 bytes of non-whitespace source.
 ## Overview
 
 It'll be useful to know a little about how the gameboy works. This won't go
-into all the details (for that you can [read the pandocs][pandocs]), but will
+into all the details (for that you can [read the pandocs][pandocs] or perhaps watch [The Ultimate Gameboy Talk][]), but will
 be enough to understand how this code works. Many values are easier to
 represent in hexadecimal, so I'll write those with a leading `$`, e.g. `$FE00`.
 
@@ -48,11 +48,12 @@ represent in hexadecimal, so I'll write those with a leading `$`, e.g. `$FE00`.
 
 ### CPU
 
-The gameboy CPU is a bit weird -- it's kind of like an [Intel 8080][8080] and
-kind of like a [Zilog Z80][z80], but not the same as either. It has an 8-bit
-accumulator `A`, and 3 16-bit register pairs, `BC`, `DE`, and `HL`, which can
-be individually accessed as the 8-bit registers `B`, `C`, `D`, `E`, `H` and
-`L`. It also has a 16-bit stack pointer `SP`, a 16-bit program counter `PC`. 
+The gameboy CPU is a bit weird &mdash; it's kind of like an [Intel 8080][8080]
+and kind of like a [Zilog Z80][z80], but not the same as either. It has an
+8-bit accumulator `A`, and three 16-bit register pairs, `BC`, `DE`, and `HL`,
+which can be individually accessed as the 8-bit registers `B`, `C`, `D`, `E`,
+`H` and `L`. It also has a 16-bit stack pointer `SP`, a 16-bit program counter
+`PC`.
 
 | 16-bit | High byte | Low byte | Description |
 | - | - | - | - |
@@ -263,11 +264,11 @@ bank.
 
 ### Memory-mapped I/O
 
-The gameboy has 80 bytes of memory-mapped I/O, from address `$FF00` to `$FF7F`.
-These addresses are sometimes called registers, not to be confused with the CPU
-registers. Not all of these addresses are used by the gameboy, and not all of
-the valid addresses are used by Pokémon Blue, and not all of the addresses used
-by Pokémon Blue are implemented in pokegb!
+The gameboy has 128 bytes of memory-mapped I/O, from address `$FF00` to
+`$FF7F`. These addresses are sometimes called registers, not to be confused
+with the CPU registers. Not all of these addresses are used by the gameboy, and
+not all of the valid addresses are used by Pokémon Blue, and not all of the
+addresses used by Pokémon Blue are implemented in pokegb!
 
 Here is a list of the registers used by the original gameboy, with the
 unimplemented ones struck through:
@@ -299,9 +300,9 @@ Several of the registers are used as full 8-bit values (`DIV`, `SCY`, `SCX`,
 
 | Register | 7 | 6 | 5 | 4 | 3 | 2 | 1 | 0 |
 | - | - | - | - | - | - | - | - | - | - |
-| JOYP | 1 | 1 | 1 | 1 | 1 | 1 | 1 | 1 | 
-| JOYP (reading directions) | 1 | 1 | 1 | 0 | ~Down | ~Up | ~Left | ~Right | 
-| JOYP (reading buttons) | 1 | 1 | 0 | 1 | ~Start | ~Select | ~B | ~A | 
+| JOYP | 1 | 1 | 1 | 1 | 1 | 1 | 1 | 1 |
+| JOYP (reading directions) | 1 | 1 | 1 | 0 | ~Down | ~Up | ~Left | ~Right |
+| JOYP (reading buttons) | 1 | 1 | 0 | 1 | ~Start | ~Select | ~B | ~A |
 | LCDC | LCD enable | Window tile map | Window enable | BG/Window tile data | BG tile map | ~~Object size~~ | Object enable | ~~BG/Window enable~~ |
 | IF | 1 | 1 | 1 | ~~Joypad~~ | ~~Serial~~ | ~~Timer~~ | ~~LCD STAT~~ | Vblank |
 | IE | 1 | 1 | 1 | ~~Joypad~~ | ~~Serial~~ | ~~Timer~~ | ~~LCD STAT~~ | Vblank |
@@ -1062,7 +1063,7 @@ OP4_NX16_REL(2) // LD (r16), A
 ```
 
 Then `INC r16` and `DEC r16`, which increment or decrement a register pair.
-These take an additional M-cycle.
+These take an additional M-cycle, so `tick()` is called.
 
 ```cpp
 OP4_NX16_REL(3) // INC r16
@@ -1193,7 +1194,7 @@ BCD values, we'll get `$4B` instead. Executing `DAA` after this addition will
 adjust `$4B` to `$51` as expected.
 
 The first `if` determines whether we need to adjust the least-significant
-nibble, and the second `if` determins whether we need to adjust the
+nibble, and the second `if` determines whether we need to adjust the
 most-significant nibble. The adjustment value added to (or subtracted from) `A`
 is either `$00`, `$06`, `$60`, or `$66`, depending on the values of the `H`,
 `C`, and `N` flags, and the current value of the `A` register.
@@ -1642,12 +1643,12 @@ for (DIV += cycles - prev_cycles; prev_cycles++ != cycles;)
 
 First off, we only want to draw the screen if the LCD is enabled (see `LCDC`
 bit 7). So we check for that, and otherwise reset the current PPU dot and the
-current scanline counter to zero:
+current scanline counter to zero (since it means that the screen is off):
 
 ```cpp
 if (LCDC & 128) {
   ...
-} else 
+} else
   LY = ppu_dot = 0;
 ```
 
@@ -1749,7 +1750,7 @@ around back to `$8800` at tile index 128. `LCDC` bit 4 (`== 16`) determines
 this behavior.
 
 We can get the pixel row of the tile to draw with the expression `y_offset %
-8`. Each row is 2` bytes (since it has two bitplanes) and each tile is 16
+8`. Each row is 2 bytes (since it has two bitplanes) and each tile is 16
 bytes:
 
 ```cpp
@@ -1759,7 +1760,7 @@ uint8_t *tile_data =
 ```
 
 This gives us the low byte of this row in `tile_data[0]` and the high byte in
-`tile_data[1]`. `x-offset & 7` will give us the offset of the current pixel in
+`tile_data[1]`. `x_offset & 7` will give us the offset of the current pixel in
 this tile's row. However, you may have noticed above that a tile's row has the
 leftmost pixel as the most-significant bit. So, for example, if we are at pixel
 offset 0, we want to use bit 7 of the row. This means that the amount to
@@ -1863,11 +1864,11 @@ uint8_t sprite_color =
   (*tile_data >> sprite_x) % 2;
 ```
 
-A sprite's pixel is only drawn if the sprite's pixel is non-transparent. But
-the background pixel also must be transparent or the sprite must have priority
-over the background. In other words, if the background pixel is non-transparent
-and the sprite doesn't have priority, then the sprite's pixel will _not_ be
-drawn.
+A sprite's pixel is only drawn if the sprite's pixel is non-transparent. In
+addition, the background pixel also must be transparent or the sprite must have
+priority over the background for the sprite's pixel to be drawn. In other
+words, if the background pixel is non-transparent and the sprite doesn't have
+priority, then the sprite's pixel will _not_ be drawn.
 
 The sprite priority is bit 7 of `sprite[3]`; if it is 1, then the sprite is
 drawn behind the background.
@@ -2009,6 +2010,7 @@ twitter [@binjimint][]. Thanks to everyone on the [emudev discord][] and the
 [IOCCC]: https://www.ioccc.org/
 [binjgb]: https://github.com/binji/binjgb
 [pandocs]: https://gbdev.io/pandocs
+[The Ultimate Gameboy Talk]: https://youtu.be/HyzD8pNlpwI
 [8080]: https://en.wikipedia.org/wiki/Intel_8080
 [z80]: https://en.wikipedia.org/wiki/Zilog_Z80
 [SM83 decoding]: https://cdn.discordapp.com/attachments/465586075830845475/742438340078469150/SM83_decoding.pdf
