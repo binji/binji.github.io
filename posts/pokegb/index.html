@@ -73,16 +73,17 @@ whitespace and comments, it comes to 4720 bytes. That's too large for the
 lines and a total of 7786 bytes, with 5954 bytes of non-whitespace source.</p>
 <h2>Overview</h2>
 <p>It'll be useful to know a little about how the gameboy works. This won't go
-into all the details (for that you can <a href="https://gbdev.io/pandocs">read the pandocs</a>), but will
+into all the details (for that you can <a href="https://gbdev.io/pandocs">read the pandocs</a> or perhaps watch <a href="https://youtu.be/HyzD8pNlpwI">The Ultimate Gameboy Talk</a>), but will
 be enough to understand how this code works. Many values are easier to
 represent in hexadecimal, so I'll write those with a leading <code>$</code>, e.g. <code>$FE00</code>.</p>
 <p><img src="/assets/2021-06-03-pokegb2.gif" alt="pokeprof-gif"></p>
 <h3>CPU</h3>
-<p>The gameboy CPU is a bit weird -- it's kind of like an <a href="https://en.wikipedia.org/wiki/Intel_8080">Intel 8080</a> and
-kind of like a <a href="https://en.wikipedia.org/wiki/Zilog_Z80">Zilog Z80</a>, but not the same as either. It has an 8-bit
-accumulator <code>A</code>, and 3 16-bit register pairs, <code>BC</code>, <code>DE</code>, and <code>HL</code>, which can
-be individually accessed as the 8-bit registers <code>B</code>, <code>C</code>, <code>D</code>, <code>E</code>, <code>H</code> and
-<code>L</code>. It also has a 16-bit stack pointer <code>SP</code>, a 16-bit program counter <code>PC</code>.</p>
+<p>The gameboy CPU is a bit weird — it's kind of like an <a href="https://en.wikipedia.org/wiki/Intel_8080">Intel 8080</a>
+and kind of like a <a href="https://en.wikipedia.org/wiki/Zilog_Z80">Zilog Z80</a>, but not the same as either. It has an
+8-bit accumulator <code>A</code>, and three 16-bit register pairs, <code>BC</code>, <code>DE</code>, and <code>HL</code>,
+which can be individually accessed as the 8-bit registers <code>B</code>, <code>C</code>, <code>D</code>, <code>E</code>,
+<code>H</code> and <code>L</code>. It also has a 16-bit stack pointer <code>SP</code>, a 16-bit program counter
+<code>PC</code>.</p>
 <table>
 <thead>
 <tr>
@@ -1012,11 +1013,11 @@ first.</p>
 is 32KiB. Writing a value between 0 and 3 to <code>$4000-$5FFF</code> will select a RAM
 bank.</p>
 <h3>Memory-mapped I/O</h3>
-<p>The gameboy has 80 bytes of memory-mapped I/O, from address <code>$FF00</code> to <code>$FF7F</code>.
-These addresses are sometimes called registers, not to be confused with the CPU
-registers. Not all of these addresses are used by the gameboy, and not all of
-the valid addresses are used by Pokémon Blue, and not all of the addresses used
-by Pokémon Blue are implemented in pokegb!</p>
+<p>The gameboy has 128 bytes of memory-mapped I/O, from address <code>$FF00</code> to
+<code>$FF7F</code>. These addresses are sometimes called registers, not to be confused
+with the CPU registers. Not all of these addresses are used by the gameboy, and
+not all of the valid addresses are used by Pokémon Blue, and not all of the
+addresses used by Pokémon Blue are implemented in pokegb!</p>
 <p>Here is a list of the registers used by the original gameboy, with the
 unimplemented ones struck through:</p>
 <table>
@@ -2157,7 +2158,7 @@ also can optionally increment or decrement <code>HL</code>. Notice that we use
 equal to <code>opcode_rel / 16</code>. But for other instructions it will be useful:</p>
 <pre class="language-cpp"><code class="language-cpp"><span class="highlight-line"><span class="token function">OP4_NX16_REL</span><span class="token punctuation">(</span><span class="token number">2</span><span class="token punctuation">)</span> <span class="token comment">// LD (r16), A</span></span><br><span class="highlight-line">  <span class="token function">write8</span><span class="token punctuation">(</span>A<span class="token punctuation">,</span> <span class="token operator">*</span>reg16_group2<span class="token punctuation">[</span>opcode <span class="token operator">>></span> <span class="token number">4</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">;</span></span><br><span class="highlight-line">  HL <span class="token operator">+=</span> HL_add<span class="token punctuation">[</span>opcode_rel <span class="token operator">/</span> <span class="token number">16</span><span class="token punctuation">]</span><span class="token punctuation">;</span></span><br><span class="highlight-line">  <span class="token keyword">break</span><span class="token punctuation">;</span></span></code></pre>
 <p>Then <code>INC r16</code> and <code>DEC r16</code>, which increment or decrement a register pair.
-These take an additional M-cycle.</p>
+These take an additional M-cycle, so <code>tick()</code> is called.</p>
 <pre class="language-cpp"><code class="language-cpp"><span class="highlight-line"><span class="token function">OP4_NX16_REL</span><span class="token punctuation">(</span><span class="token number">3</span><span class="token punctuation">)</span> <span class="token comment">// INC r16</span></span><br><span class="highlight-line">  <span class="token punctuation">(</span><span class="token operator">*</span>reg16_group1<span class="token punctuation">[</span>opcode <span class="token operator">>></span> <span class="token number">4</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token operator">++</span><span class="token punctuation">;</span></span><br><span class="highlight-line">  <span class="token function">tick</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span></span><br><span class="highlight-line">  <span class="token keyword">break</span><span class="token punctuation">;</span></span><br><span class="highlight-line"></span><br><span class="highlight-line"><span class="token function">OP4_NX16_REL</span><span class="token punctuation">(</span><span class="token number">11</span><span class="token punctuation">)</span> <span class="token comment">// DEC r16</span></span><br><span class="highlight-line">  <span class="token punctuation">(</span><span class="token operator">*</span>reg16_group1<span class="token punctuation">[</span>opcode <span class="token operator">>></span> <span class="token number">4</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token operator">--</span><span class="token punctuation">;</span></span><br><span class="highlight-line">  <span class="token function">tick</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span></span><br><span class="highlight-line">  <span class="token keyword">break</span><span class="token punctuation">;</span></span></code></pre>
 <p>Likewise there are <code>INC r8</code> and <code>DEC r8</code> which increment or decrement an 8-bit
 register. Unlike their 16-bit equivalents, these update CPU flags. <code>goto</code> is
@@ -2208,7 +2209,7 @@ the decimal numbers 42 and add 9, we expect to get 51. But if we do this with
 BCD values, we'll get <code>$4B</code> instead. Executing <code>DAA</code> after this addition will
 adjust <code>$4B</code> to <code>$51</code> as expected.</p>
 <p>The first <code>if</code> determines whether we need to adjust the least-significant
-nibble, and the second <code>if</code> determins whether we need to adjust the
+nibble, and the second <code>if</code> determines whether we need to adjust the
 most-significant nibble. The adjustment value added to (or subtracted from) <code>A</code>
 is either <code>$00</code>, <code>$06</code>, <code>$60</code>, or <code>$66</code>, depending on the values of the <code>H</code>,
 <code>C</code>, and <code>N</code> flags, and the current value of the <code>A</code> register.</p>
@@ -2367,8 +2368,8 @@ and increment it directly:</p>
 <pre class="language-cpp"><code class="language-cpp"><span class="highlight-line"><span class="token keyword">for</span> <span class="token punctuation">(</span>DIV <span class="token operator">+=</span> cycles <span class="token operator">-</span> prev_cycles<span class="token punctuation">;</span> prev_cycles<span class="token operator">++</span> <span class="token operator">!=</span> cycles<span class="token punctuation">;</span><span class="token punctuation">)</span></span><br><span class="highlight-line">  <span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span></span></code></pre>
 <p>First off, we only want to draw the screen if the LCD is enabled (see <code>LCDC</code>
 bit 7). So we check for that, and otherwise reset the current PPU dot and the
-current scanline counter to zero:</p>
-<pre class="language-cpp"><code class="language-cpp"><span class="highlight-line"><span class="token keyword">if</span> <span class="token punctuation">(</span>LCDC <span class="token operator">&amp;</span> <span class="token number">128</span><span class="token punctuation">)</span> <span class="token punctuation">{</span></span><br><span class="highlight-line">  <span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span></span><br><span class="highlight-line"><span class="token punctuation">}</span> <span class="token keyword">else</span> </span><br><span class="highlight-line">  LY <span class="token operator">=</span> ppu_dot <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span></span></code></pre>
+current scanline counter to zero (since it means that the screen is off):</p>
+<pre class="language-cpp"><code class="language-cpp"><span class="highlight-line"><span class="token keyword">if</span> <span class="token punctuation">(</span>LCDC <span class="token operator">&amp;</span> <span class="token number">128</span><span class="token punctuation">)</span> <span class="token punctuation">{</span></span><br><span class="highlight-line">  <span class="token punctuation">.</span><span class="token punctuation">.</span><span class="token punctuation">.</span></span><br><span class="highlight-line"><span class="token punctuation">}</span> <span class="token keyword">else</span></span><br><span class="highlight-line">  LY <span class="token operator">=</span> ppu_dot <span class="token operator">=</span> <span class="token number">0</span><span class="token punctuation">;</span></span></code></pre>
 <p>Next we want to trigger a vblank interrupt when the screen is finished
 rendering. This happens after the 143rd line finishes, so we check whether the
 current &quot;dot&quot; was 0, and whether the current scanline is 144, and set the
@@ -2420,11 +2421,11 @@ for that tile. The starting address of the tile data is either <code>$8000</code
 tile 0 is actually at address <code>$9000</code>, and then the tile indexes wrap
 around back to <code>$8800</code> at tile index 128. <code>LCDC</code> bit 4 (<code>== 16</code>) determines
 this behavior.</p>
-<p>We can get the pixel row of the tile to draw with the expression <code>y_offset % 8</code>. Each row is 2` bytes (since it has two bitplanes) and each tile is 16
+<p>We can get the pixel row of the tile to draw with the expression <code>y_offset % 8</code>. Each row is 2 bytes (since it has two bitplanes) and each tile is 16
 bytes:</p>
 <pre class="language-cpp"><code class="language-cpp"><span class="highlight-line"><span class="token keyword">uint8_t</span> <span class="token operator">*</span>tile_data <span class="token operator">=</span></span><br><span class="highlight-line">  <span class="token operator">&amp;</span>video_ram<span class="token punctuation">[</span><span class="token punctuation">(</span>LCDC <span class="token operator">&amp;</span> <span class="token number">16</span> <span class="token operator">?</span> tile <span class="token operator">:</span> <span class="token number">256</span> <span class="token operator">+</span> <span class="token punctuation">(</span><span class="token keyword">int8_t</span><span class="token punctuation">)</span>tile<span class="token punctuation">)</span> <span class="token operator">*</span> <span class="token number">16</span> <span class="token operator">+</span></span><br><span class="highlight-line">             y_offset <span class="token operator">%</span> <span class="token number">8</span> <span class="token operator">*</span> <span class="token number">2</span><span class="token punctuation">]</span><span class="token punctuation">;</span></span></code></pre>
 <p>This gives us the low byte of this row in <code>tile_data[0]</code> and the high byte in
-<code>tile_data[1]</code>. <code>x-offset &amp; 7</code> will give us the offset of the current pixel in
+<code>tile_data[1]</code>. <code>x_offset &amp; 7</code> will give us the offset of the current pixel in
 this tile's row. However, you may have noticed above that a tile's row has the
 leftmost pixel as the most-significant bit. So, for example, if we are at pixel
 offset 0, we want to use bit 7 of the row. This means that the amount to
@@ -2605,11 +2606,11 @@ is set.</p>
 <pre class="language-cpp"><code class="language-cpp"><span class="highlight-line">tile_data <span class="token operator">=</span></span><br><span class="highlight-line">    <span class="token operator">&amp;</span>video_ram<span class="token punctuation">[</span>sprite<span class="token punctuation">[</span><span class="token number">2</span><span class="token punctuation">]</span> <span class="token operator">*</span> <span class="token number">16</span> <span class="token operator">+</span></span><br><span class="highlight-line">               <span class="token punctuation">(</span>sprite_y <span class="token operator">^</span> <span class="token punctuation">(</span>sprite<span class="token punctuation">[</span><span class="token number">3</span><span class="token punctuation">]</span> <span class="token operator">&amp;</span> <span class="token number">64</span> <span class="token operator">?</span> <span class="token number">7</span> <span class="token operator">:</span> <span class="token number">0</span><span class="token punctuation">)</span><span class="token punctuation">)</span> <span class="token operator">*</span> <span class="token number">2</span><span class="token punctuation">]</span><span class="token punctuation">;</span></span></code></pre>
 <p>We can then extract the color of the sprite's pixel:</p>
 <pre class="language-cpp"><code class="language-cpp"><span class="highlight-line"><span class="token keyword">uint8_t</span> sprite_color <span class="token operator">=</span></span><br><span class="highlight-line">  <span class="token punctuation">(</span>tile_data<span class="token punctuation">[</span><span class="token number">1</span><span class="token punctuation">]</span> <span class="token operator">>></span> sprite_x<span class="token punctuation">)</span> <span class="token operator">%</span> <span class="token number">2</span> <span class="token operator">*</span> <span class="token number">2</span> <span class="token operator">+</span></span><br><span class="highlight-line">  <span class="token punctuation">(</span><span class="token operator">*</span>tile_data <span class="token operator">>></span> sprite_x<span class="token punctuation">)</span> <span class="token operator">%</span> <span class="token number">2</span><span class="token punctuation">;</span></span></code></pre>
-<p>A sprite's pixel is only drawn if the sprite's pixel is non-transparent. But
-the background pixel also must be transparent or the sprite must have priority
-over the background. In other words, if the background pixel is non-transparent
-and the sprite doesn't have priority, then the sprite's pixel will <em>not</em> be
-drawn.</p>
+<p>A sprite's pixel is only drawn if the sprite's pixel is non-transparent. In
+addition, the background pixel also must be transparent or the sprite must have
+priority over the background for the sprite's pixel to be drawn. In other
+words, if the background pixel is non-transparent and the sprite doesn't have
+priority, then the sprite's pixel will <em>not</em> be drawn.</p>
 <p>The sprite priority is bit 7 of <code>sprite[3]</code>; if it is 1, then the sprite is
 drawn behind the background.</p>
 <p>The sprite can use one of two palettes, <code>OBP0</code> and <code>OBP1</code>. If bit 3 of
