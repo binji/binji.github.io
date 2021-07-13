@@ -1940,10 +1940,11 @@ to one of the 8-bit registers.</p>
 <p>It's convenient to be able to access most registers both as their 16-bit pairs
 or their 8-bit parts. So all CPU registers are defined in an array, along with
 their initial values.</p>
-<p>These are defined in the order <code>C</code>, <code>B</code>, <code>E</code>, <code>D</code>, <code>L</code>, <code>H</code>, <code>SP High</code>, <code>SP Low</code>. This allows us to read a 16-bit register pair directly as long as the
-host machine is little-endian. Note that SP is never accessed as an 8-bit
-register, so it doesn't need to be defined here; this may be a place where I
-could save some additional bytes.</p>
+<p>These are defined in the order <code>C</code>, <code>B</code>, <code>E</code>, <code>D</code>, <code>L</code>, <code>H</code>, <code>F</code>, <code>A</code>,
+<code>SP Low</code>, <code>SP High</code>. This allows us to read a 16-bit register pair directly as
+long as the host machine is little-endian. Note that SP is never accessed as an
+8-bit register, so it doesn't need to be defined here; this may be a place
+where I could save some additional bytes.</p>
 <p>The <code>A</code> and <code>F</code> registers are used for many of the instructions directly, so we
 create references to them by name.</p>
 <pre class="language-cpp"><code class="language-cpp"><span class="highlight-line"><span class="token keyword">uint8_t</span> reg8<span class="token punctuation">[</span><span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token punctuation">{</span><span class="token number">19</span><span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">,</span> <span class="token number">216</span><span class="token punctuation">,</span> <span class="token number">0</span><span class="token punctuation">,</span> <span class="token number">77</span><span class="token punctuation">,</span> <span class="token number">1</span><span class="token punctuation">,</span> <span class="token number">176</span><span class="token punctuation">,</span> <span class="token number">1</span><span class="token punctuation">,</span> <span class="token number">254</span><span class="token punctuation">,</span> <span class="token number">255</span><span class="token punctuation">}</span><span class="token punctuation">,</span></span><br><span class="highlight-line">        <span class="token operator">&amp;</span>F <span class="token operator">=</span> reg8<span class="token punctuation">[</span><span class="token number">6</span><span class="token punctuation">]</span><span class="token punctuation">,</span></span><br><span class="highlight-line">        <span class="token operator">&amp;</span>A <span class="token operator">=</span> reg<span class="token punctuation">[</span><span class="token number">7</span><span class="token punctuation">]</span><span class="token punctuation">;</span></span></code></pre>
