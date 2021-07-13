@@ -634,7 +634,7 @@ create references to them by name.
 ```cpp
 uint8_t reg8[] = {19, 0, 216, 0, 77, 1, 176, 1, 254, 255},
         &F = reg8[6],
-        &A = reg[7];
+        &A = reg8[7];
 ```
 
 The `r8` group described above uses the order `B, C, D, E, F, H, L, (HL), A`.
