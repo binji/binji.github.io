@@ -4,7 +4,7 @@ layout: post
 title: about
 ---
 - Who: Ben Smith
-- What: Software Engineer @ Google, thoughts here are my own
+- What: Software Engineer, unemployed, thoughts here are my own
 - Where: Oakland, CA
 - When: Presently
 - Why: Too much free time, I suppose
