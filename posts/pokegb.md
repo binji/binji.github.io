@@ -622,11 +622,11 @@ It's convenient to be able to access most registers both as their 16-bit pairs
 or their 8-bit parts. So all CPU registers are defined in an array, along with
 their initial values.
 
-These are defined in the order `C`, `B`, `E`, `D`, `L`, `H`, `SP High`, `SP
-Low`. This allows us to read a 16-bit register pair directly as long as the
-host machine is little-endian. Note that SP is never accessed as an 8-bit
-register, so it doesn't need to be defined here; this may be a place where I
-could save some additional bytes.
+These are defined in the order `C`, `B`, `E`, `D`, `L`, `H`, `F`, `A`,
+`SP Low`, `SP High`. This allows us to read a 16-bit register pair directly as
+long as the host machine is little-endian. Note that SP is never accessed as an
+8-bit register, so it doesn't need to be defined here; this may be a place
+where I could save some additional bytes.
 
 The `A` and `F` registers are used for many of the instructions directly, so we
 create references to them by name.
